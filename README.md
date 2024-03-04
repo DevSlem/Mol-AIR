@@ -73,15 +73,6 @@ python run.py config/similarity/count_ppo.yaml # Count+PPO
 python run.py config/similarity/count_rnd.yaml # Count+RND
 ```
 
-DRD2:
-
-```bash
-python run.py config/drd2/ppo.yaml # PPO
-python run.py config/drd2/rnd.yaml # RND
-python run.py config/drd2/count_ppo.yaml # Count+PPO
-python run.py config/drd2/count_rnd.yaml # Count+RND
-```
-
 GSK3B:
 
 ```bash
@@ -98,6 +89,15 @@ python run.py config/jnk3/ppo.yaml # PPO
 python run.py config/jnk3/rnd.yaml # RND
 python run.py config/jnk3/count_ppo.yaml # Count+PPO
 python run.py config/jnk3/count_rnd.yaml # Count+RND
+```
+
+GSK3B+JNK3:
+
+```bash
+python run.py config/gsk3b_jnk3/ppo.yaml # PPO
+python run.py config/gsk3b_jnk3/rnd.yaml # RND
+python run.py config/gsk3b_jnk3/count_ppo.yaml # Count+PPO
+python run.py config/gsk3b_jnk3/count_rnd.yaml # Count+RND
 ```
 
 <!-- ### Inference
