@@ -1,4 +1,4 @@
-Similarity-CountRND_0.0001_0.1:
+Similarity-CountRND_0.001_0.1:
   Agent:
     device: cuda
     entropy_coef: 0.001
@@ -12,7 +12,7 @@ Similarity-CountRND_0.0001_0.1:
   Env:
     max_str_len: 35
     similarity_coef: 1.0
-    count_coef: 0.0001
+    count_coef: 0.001
   Train:
     num_envs: 64
     seed: 0

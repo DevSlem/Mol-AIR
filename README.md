@@ -51,7 +51,6 @@ You can reproduce the following properties, pLogP:
 ```bash
 python run.py config/plogp/ppo.yaml # PPO
 python run.py config/plogp/rnd.yaml # RND
-python run.py config/plogp/naive_rnd.yaml # Naive RND
 python run.py config/plogp/count_ppo.yaml # Count+PPO
 python run.py config/plogp/count_rnd.yaml # Count+RND
 ```
@@ -61,7 +60,6 @@ QED:
 ```bash
 python run.py config/qed/ppo.yaml # PPO
 python run.py config/qed/rnd.yaml # RND
-python run.py config/qed/naive_rnd.yaml # Naive RND
 python run.py config/qed/count_ppo.yaml # Count+PPO
 python run.py config/qed/count_rnd.yaml # Count+RND
 ```
@@ -71,7 +69,6 @@ Similarity:
 ```bash
 python run.py config/similarity/ppo.yaml # PPO
 python run.py config/similarity/rnd.yaml # RND
-python run.py config/similarity/naive_rnd.yaml # Naive RND
 python run.py config/similarity/count_ppo.yaml # Count+PPO
 python run.py config/similarity/count_rnd.yaml # Count+RND
 ```
@@ -81,7 +78,6 @@ DRD2:
 ```bash
 python run.py config/drd2/ppo.yaml # PPO
 python run.py config/drd2/rnd.yaml # RND
-python run.py config/drd2/naive_rnd.yaml # Naive RND
 python run.py config/drd2/count_ppo.yaml # Count+PPO
 python run.py config/drd2/count_rnd.yaml # Count+RND
 ```
@@ -91,7 +87,6 @@ GSK3B:
 ```bash
 python run.py config/gsk3b/ppo.yaml # PPO
 python run.py config/gsk3b/rnd.yaml # RND
-python run.py config/gsk3b/naive_rnd.yaml # Naive RND
 python run.py config/gsk3b/count_ppo.yaml # Count+PPO
 python run.py config/gsk3b/count_rnd.yaml # Count+RND
 ```
@@ -101,7 +96,6 @@ JNK3:
 ```bash
 python run.py config/jnk3/ppo.yaml # PPO
 python run.py config/jnk3/rnd.yaml # RND
-python run.py config/jnk3/naive_rnd.yaml # Naive RND
 python run.py config/jnk3/count_ppo.yaml # Count+PPO
 python run.py config/jnk3/count_rnd.yaml # Count+RND
 ```

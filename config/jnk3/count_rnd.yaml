@@ -1,4 +1,4 @@
-JNK3-CountRND_0.00005_0.05:
+JNK3-CountRND_0.0005_0.05:
   Agent:
     device: cuda
     entropy_coef: 0.001
@@ -12,7 +12,7 @@ JNK3-CountRND_0.00005_0.05:
   Env:
     jnk3_coef: 1.0
     max_str_len: 35
-    count_coef: 0.00005
+    count_coef: 0.0005
   Train:
     num_envs: 64
     seed: 0

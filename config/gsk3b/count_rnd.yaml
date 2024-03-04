@@ -1,4 +1,4 @@
-GSK3B-CountRND_0.00065_0.65:
+GSK3B-CountRND_0.0065_0.65:
   Agent:
     device: cuda
     entropy_coef: 0.001
@@ -12,7 +12,7 @@ GSK3B-CountRND_0.00065_0.65:
   Env:
     gsk3b_coef: 1.0
     max_str_len: 35
-    count_coef: 0.00065
+    count_coef: 0.0065
   Train:
     num_envs: 64
     seed: 0

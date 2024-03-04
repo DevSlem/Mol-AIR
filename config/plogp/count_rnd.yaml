@@ -1,4 +1,4 @@
-PLogP-CountRND_0.001_1.0:
+PLogP-CountRND_0.01_1.0:
   Agent:
     device: cuda
     entropy_coef: 0.001
@@ -10,7 +10,7 @@ PLogP-CountRND_0.001_1.0:
     seq_mini_batch_size: 16
     type: RecurrentPPORND
   Env:
-    count_coef: 0.001
+    count_coef: 0.01
     max_str_len: 35
     plogp_coef: 1.0
   Train:
