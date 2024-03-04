@@ -1,0 +1,20 @@
+JNK3-CountEpisodicRND_0.01_0.1:
+  Agent:
+    device: cuda
+    entropy_coef: 0.001
+    epoch: 6
+    gamma: 1.0
+    int_reward_coef: 0.1
+    n_steps: 64
+    seq_len: 35
+    seq_mini_batch_size: 16
+    type: RecurrentPPOEpisodicRND
+  Env:
+    count_coef: 0.01
+    max_str_len: 35
+    jnk3_coef: 1.0
+  Train:
+    num_envs: 64
+    seed: 0
+    summary_freq: 1000
+    time_steps: 120000

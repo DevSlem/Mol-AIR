@@ -1,0 +1,22 @@
+Test:
+  Agent:
+    device: cuda
+    entropy_coef: 0.001
+    epoch: 3
+    gamma: 1.0
+    int_reward_coef: 1.0
+    n_steps: 128
+    seq_len: 16
+    seq_mini_batch_size: 8
+    type: RecurrentPPOEpisodicRND
+  Env:
+    max_str_len: 35
+    plogp_coef: 1.0
+    count_coef: 0.1
+    memory_coef: 0.1
+  Train:
+    num_envs: 3
+    seed: 0
+    summary_freq: 500
+    agent_save_freq: 1000
+    time_steps: 3000

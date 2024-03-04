@@ -1,0 +1,19 @@
+GSK3B-RND_0.65:
+  Agent:
+    device: cuda
+    entropy_coef: 0.001
+    epoch: 6
+    ext_gamma: 1.0
+    int_adv_coef: 0.65
+    n_steps: 64
+    seq_len: 35
+    seq_mini_batch_size: 16
+    type: RecurrentPPORND
+  Env:
+    gsk3b_coef: 1.0
+    max_str_len: 35
+  Train:
+    num_envs: 64
+    seed: 0
+    summary_freq: 1000
+    time_steps: 120000
