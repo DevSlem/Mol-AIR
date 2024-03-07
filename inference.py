@@ -309,4 +309,4 @@ class InferenceCkpt:
             raise RuntimeError("the loaded agent is not compatible wsith the current agent")
         
         self._time_steps = state_dict["train"]["time_steps"]
-        self._episodes = state_dict["train"]["episodes"
+        self._episodes = state_dict["train"]["episodes"]
