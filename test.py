@@ -1,121 +1,140 @@
-import multiprocessing as mp
+import unittest
 
 import numpy as np
-import torch
 
-import envs
-from envs.chem_env import (ChemEnv, ChemExtrinsicRewardConfig,
-                           ChemIntrinsicRewardConfig)
+from envs.chem_env import ChemEnv, make_async_chem_env
+from train import MolRLTrainFactory
+import shutil
 
-
-def make_async_env(num_envs: int = 1):
-    env_factories = tuple(lambda: ChemEnv(ChemExtrinsicRewardConfig(plogp_coef=1.0), ChemIntrinsicRewardConfig(), max_str_len=5) for _ in range(num_envs))
-    return envs.AsyncEnv(env_factories)
-
-def test_async_env_reset():
-    print("=== test async env reset ===")
-    env = make_async_env(num_envs=3)
-    obs = env.reset()
-    print(f"obs: {obs.shape}")
-    env.close()
-    
-def test_async_env_step():
-    print("=== test async env step ===")
-    env = make_async_env(num_envs=3)
-    obs = env.reset()
-    for _ in range(10):
-        obs, reward, terminated, real_final_next_obs, info = env.step(
-            torch.randint(env.num_actions, (env.num_envs, 1))
+class Test(unittest.TestCase):
+    def test_chem_env(self):
+        print("=== test env ===")
+        
+        env = ChemEnv(
+            plogp_coef=1.0,
+            max_str_len=10
         )
-        # print(f"obs: {obs.shape}, reward: {reward.shape}, terminated: {terminated.shape}, real_final_next_obs: {real_final_next_obs.shape}, info: {info}")
-        # print(f"terminated: {terminated}, info: {info}")
-        if "metric" in info:
-            print(info["metric"])
-    env.close()
-    
-def test_tensorboard():
-    import warnings
-    warnings.filterwarnings(action="ignore")
-    from torch.utils.tensorboard.writer import SummaryWriter
-
-    warnings.filterwarnings(action="default")
-    
-    tb = SummaryWriter(log_dir="results/test")
-    tb.add_scalar("Test", 0.1, 0)
-    tb.add_scalar("Test", 1.0, 1)
-    tb.flush()
-    tb.close()
-    
-def test_shared_object_mp():
-    class Foo:
-        def __init__(self, shared_queue: mp.Queue) -> None:
-            self._shared_queue = shared_queue
-            
-        def bar(self):
-            arr = np.random.rand(3)
-            print(arr)
-            self._shared_queue.put(arr)
-            
-    def worker(foo_make_func):
-        foo = foo_make_func()
-        foo.bar()
-            
-    shared_queue = mp.Queue()
-    foo_factories = tuple(lambda: Foo(shared_queue) for _ in range(3))
-    workers = tuple(mp.Process(target=worker, args=(foo_make_func,)) for foo_make_func in foo_factories)
-    for i, w in enumerate(workers):
-        np.random.seed(i)
-        w.start()
-    import time
-    time.sleep(1)
-    print("queue test")
-    for _ in range(3):
-        print(shared_queue.get())
-    for w in workers:
-        w.join()
         
-def test_env():
-    env = ChemEnv(
-        ChemExtrinsicRewardConfig(plogp_coef=1.0),
-        ChemIntrinsicRewardConfig(),
-        max_str_len=10,
-        record_data=True
-    )
-    
-    _ = env.reset()
-    terminated = False
-    while not terminated:
-        action = torch.randint(env.num_actions, (1, 1))
-        _, _, terminated, _ = env.step(action)
+        obs = env.reset()
+        # check all elements of obs are -1
+        self.assertTrue(np.all(obs == -1), f"obs: {obs}")
+        terminated = False
+        time_step = 0
+        while not terminated:
+            action = np.random.randint(env.num_actions, size=(1, 1))
+            next_obs, reward, terminated, real_final_next_obs, _ = env.step(action)
+            self.assertTrue(reward.shape == (1,), f"reward: {reward}")
+            self.assertTrue(terminated.shape == (1,), f"terminated: {terminated}")
+            if not terminated:
+                self.assertTrue(next_obs[0, time_step] == action[0], f"time_step: {time_step}, next_obs: {next_obs}, action: {action}")
+            else:
+                self.assertTrue(np.all(next_obs == -1), f"next_obs: {next_obs}")
+                self.assertTrue(real_final_next_obs[0, time_step] == action[0], f"time_step: {time_step}, real_final_next_obs: {real_final_next_obs}, action: {action}")
+            time_step += 1
+            
+        env.close()
         
-def test_prop():
-    ## pip install PyTDC==0.4.0
-    from tdc import Oracle
-
-    ## Load oracles
-    calculate_drd2 = Oracle(name='DRD2')
-    calculate_gsk3b = Oracle(name='GSK3B')
-    calculate_jnk3 = Oracle(name='JNK3')
-    ## Example of SMILES
-    smi = 'CC1=CC=C(C=C1)C1=CC(=NN1C1=CC=C(C=C1)S(N)(=O)=O)C(F)(F)F'
-    ## Property evaluation
-    list_of_smi = [smi,]
-    score_drd2 = calculate_drd2(list_of_smi)[0] # 0.001
-    score_gsk3b = calculate_gsk3b(list_of_smi)[0] # 0.02
-    score_jnk3 = calculate_jnk3(list_of_smi)[0] # 0.02
-    print(score_drd2, score_gsk3b, score_jnk3)
-    
-def test_util():
-    import util
-    print("test1")
-    with util.suppress_stdout():
-        print("test2")
-    print("test3")
+        print("=== test env completed ===")
+        
+    def test_async_chem_env(self):
+        print("=== test make_async_chem_env ===")
+        env = make_async_chem_env(
+            num_envs=3,
+            count_int_reward_coef=1.0,
+            plogp_coef=1.0,
+            max_str_len=5,
+        )
+        
+        self.assertTrue(env.num_envs == 3, f"num_envs: {env.num_envs}")
+        self.assertTrue(env.obs_shape == (31,), f"obs_shape: {env.obs_shape}")
+        self.assertTrue(env.num_actions == 31, f"num_actions: {env.num_actions}")
+        
+        obs = env.reset()
+        self.assertTrue(obs.shape == (3, 31), f"obs shape: {obs.shape}")
+        for _ in range(10):
+            next_obs, reward, terminated, real_final_next_obs, info = env.step(
+                np.random.randint(env.num_actions, size=(env.num_envs, 1))
+            )
+            self.assertTrue(next_obs.shape == (3, 31), f"next_obs shape: {next_obs.shape}")
+            self.assertTrue(reward.shape == (3,), f"reward shape: {reward.shape}")
+            self.assertTrue(terminated.shape == (3,), f"terminated shape: {terminated.shape}")
+            self.assertTrue(real_final_next_obs.shape == (terminated.sum(), 31), f"real_final_next_obs shape: {real_final_next_obs.shape}")
+            
+            if "valid_termination" in info:
+                print(f"valid_termination: {info['valid_termination']}")
+                
+            if "metric" in info:
+                for metric_info in info["metric"]:
+                    if metric_info is not None and "avg_count_int_reward" in metric_info["episode_metric"]["values"]:
+                        print(f"avg_count_int_reward: {metric_info['episode_metric']['values']['avg_count_int_reward']}")
+                
+        env.close()
+        print("=== test make_async_chem_env completed ===")
+        
+    def test_train_ppo(self):
+        print("=== test train PPO ===")
+        
+        id = "Test_PPO"
+        shutil.rmtree(f"results/{id}", ignore_errors=True)
+        config = {
+            "Agent": {
+                "type": "PPO",
+                "n_steps": 64,
+                "seq_len": 35,
+                "seq_mini_batch_size": 16,
+                "epoch": 3,
+            },
+            "Env": {
+                "plogp_coef": 1.0,
+                "max_str_len": 10
+            },
+            "Train": {
+                "num_envs": 3,
+                "seed": 0,
+                "total_time_steps": 1000,
+                "summary_freq": 200,
+            },
+        }
+        MolRLTrainFactory(id, config) \
+            .create_train() \
+            .train() \
+            .close()
+            
+        print("=== test train PPO completed ===")
+        
+    def test_train_mol_air(self):
+        print("=== test train MolAIR ===")
+        
+        id = "Test_MolAIR"
+        shutil.rmtree(f"results/{id}", ignore_errors=True)
+        config = {
+            "Agent": {
+                "type": "RND",
+                "n_steps": 64,
+                "seq_len": 35,
+                "seq_mini_batch_size": 16,
+                "epoch": 3,
+            },
+            "Env": {
+                "plogp_coef": 1.0,
+                "max_str_len": 10
+            },
+            "Train": {
+                "num_envs": 3,
+                "seed": 0,
+                "total_time_steps": 1000,
+                "summary_freq": 200,
+            },
+            "CountIntReward": {
+                "count_int_reward_coef": 1.0
+            }
+        }
+        MolRLTrainFactory(id, config) \
+            .create_train() \
+            .train() \
+            .close()
+            
+        print("=== test train MolAIR completed ===")
     
 if __name__ == '__main__':
-    # test_async_env_reset()
-    test_async_env_step()
-    # test_shared_object_mp()
-    # test_env()
-    # test_prop()
-    # test_util()
+    unittest.main()
