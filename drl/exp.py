@@ -9,7 +9,7 @@ class Experience:
     
     Args:
         obs (Tensor): `(num_envs, *obs_shape)`
-        action (Tensor): `(num_envs, 1)`
+        action (Tensor): `(num_envs, num_actions)`
         next_obs (Tensor): `(num_envs, *obs_shape)`
         reward (Tensor): `(num_envs, 1)`
         terminated (Tensor): `(num_envs, 1)`
