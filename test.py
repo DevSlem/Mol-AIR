@@ -40,7 +40,7 @@ class Test(unittest.TestCase):
         print("=== test make_async_chem_env ===")
         env = make_async_chem_env(
             num_envs=3,
-            count_int_reward_coef=1.0,
+            crwd_coef=1.0,
             plogp_coef=1.0,
             max_str_len=5,
         )
@@ -126,7 +126,7 @@ class Test(unittest.TestCase):
                 "summary_freq": 200,
             },
             "CountIntReward": {
-                "count_int_reward_coef": 1.0
+                "crwd_coef": 1.0
             }
         }
         MolRLTrainFactory(id, config) \

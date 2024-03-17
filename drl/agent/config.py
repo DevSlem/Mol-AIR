@@ -30,7 +30,7 @@ class RecurrentPPORNDConfig:
     padding_value: float = 0.0
     gamma: float = 0.999
     gamma_n: float = 0.99
-    n_adv_coef: float = 1.0
+    nonepi_adv_coef: float = 1.0
     lam: float = 0.95
     epsilon_clip: float = 0.2
     critic_loss_coef: float = 0.5

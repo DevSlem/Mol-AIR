@@ -312,11 +312,11 @@ class ChemEnv(Env):
     
 
 class ChemEnvWrapper(EnvWrapper):
-    def __init__(self, env: ChemEnv, count_int_reward: CountIntReward, count_int_reward_coef: float = 0.0) -> None:
+    def __init__(self, env: ChemEnv, count_int_reward: CountIntReward, crwd_coef: float = 0.0) -> None:
         super().__init__(env)
         
         self._count_int_reward = count_int_reward
-        self._count_int_reward_coef = count_int_reward_coef
+        self._crwd_coef = crwd_coef
         self._tokenizer = SelfiesTokenizer()
         
         self._avg_count_reward = IncrementalMean()
@@ -330,7 +330,7 @@ class ChemEnvWrapper(EnvWrapper):
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict]:
         next_obs, reward, terminated, real_final_next_obs, info = super().step(action)
         
-        if self._count_int_reward_coef != 0.0:
+        if self._crwd_coef != 0.0:
             count_reward = 0.0
             # if either the episode is not terminated or the episode is terminated with a valid molecule,
             # then add the count-based intrinsic reward
@@ -341,7 +341,7 @@ class ChemEnvWrapper(EnvWrapper):
                 ) # selfies -> smiles
                 count_reward = self._count_int_reward(smiles) # type: ignore
                 
-            reward += self._count_int_reward_coef * count_reward
+            reward += self._crwd_coef * count_reward
             self._avg_count_reward.update(count_reward)
                 
             if "metric" in info and "episode_metric" in info["metric"]:
@@ -377,7 +377,7 @@ def make_async_chem_env(
         
         config["np_rng"] = env._np_rng
         count_int_reward = instance_from_dict(CountIntReward, config)
-        return ChemEnvWrapper(env, count_int_reward, config.get("count_int_reward_coef", 0.0))
+        return ChemEnvWrapper(env, count_int_reward, config.get("crwd_coef", 0.0))
     
     if seed is not None:
         np_rng = np.random.default_rng(seed=seed)

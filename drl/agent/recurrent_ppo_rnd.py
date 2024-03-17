@@ -324,7 +324,7 @@ class RecurrentPPORND(Agent):
             self._config.gamma_n,
             self._config.lam
         )
-        advantage = epi_advantage + self._config.n_adv_coef * nonepi_advantage
+        advantage = epi_advantage + self._config.nonepi_adv_coef * nonepi_advantage
         
         # compute target state value (num_envs, n_steps)
         epi_target_state_value = epi_advantage + entire_epi_state_value[:, :-1]
