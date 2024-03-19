@@ -1,18 +1,16 @@
 Similarity-PPO:
   Agent:
-    device: cuda
-    entropy_coef: 0.001
-    epoch: 6
-    gamma: 1.0
+    type: PPO
     n_steps: 64
+    epoch: 6
     seq_len: 35
     seq_mini_batch_size: 16
-    type: RecurrentPPO
+    gamma: 1.0
   Env:
-    max_str_len: 35
     similarity_coef: 1.0
   Train:
     num_envs: 64
     seed: 0
+    total_time_steps: 120000
     summary_freq: 1000
-    time_steps: 120000
+    device: cuda

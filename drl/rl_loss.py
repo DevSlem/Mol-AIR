@@ -81,3 +81,31 @@ def ppo_clipped_loss(
     sur1 = ratio * advantage
     sur2 = torch.clamp(ratio, 1 - epsilon, 1 + epsilon) * advantage
     return -torch.min(sur1, sur2).mean()
+
+def rnd_loss(
+    predicted_feature: torch.Tensor,
+    target_feature: torch.Tensor,
+    rnd_pred_exp_proportion: float = 0.25
+) -> torch.Tensor:
+    """
+    Random network distillation (RND) loss which is L2 loss.
+    Experiences are randomly selected to keep the effective batch size.
+
+    Args:
+        predicted_feature (torch.Tensor): `(batch_size, feature_dim)`
+        target_feature (torch.Tensor): `(batch_size, feature_dim)`
+        rnd_pred_exp_proportion (float, optional): the proportion of experiences. Defaults to 0.25.
+
+    Returns:
+        loss (Tensor): scalar value
+    """
+    loss = F.mse_loss(
+        predicted_feature,
+        target_feature.detach(),
+        reduction="none"
+    ).mean(dim=-1)
+    # the proportion of experiences to keep the effective batch size
+    mask = torch.rand(len(loss), device=loss.device)
+    mask = (mask < rnd_pred_exp_proportion).to(dtype=loss.dtype)
+    loss = (loss * mask).sum() / torch.max(mask.sum(), torch.tensor(1.0, device=loss.device))
+    return loss

@@ -1,4 +1,4 @@
-GSK3B_JNK3-PPO:
+Similarity-HIR:
   Agent:
     type: PPO
     n_steps: 64
@@ -7,11 +7,13 @@ GSK3B_JNK3-PPO:
     seq_mini_batch_size: 16
     gamma: 1.0
   Env:
-    gsk3b_coef: 0.5
-    jnk3_coef: 0.5
+    similarity_coef: 1.0
   Train:
     num_envs: 64
     seed: 0
     total_time_steps: 120000
     summary_freq: 1000
     device: cuda
+  CountIntReward:
+    crwd_coef: 0.001
+  

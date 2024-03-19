@@ -1,11 +1,12 @@
-GSK3B_JNK3-PPO:
+GSK3B_JNK3-MolAIR:
   Agent:
-    type: PPO
+    type: RND
     n_steps: 64
     epoch: 6
     seq_len: 35
     seq_mini_batch_size: 16
     gamma: 1.0
+    nonepi_adv_coef: 0.2
   Env:
     gsk3b_coef: 0.5
     jnk3_coef: 0.5
@@ -15,3 +16,5 @@ GSK3B_JNK3-PPO:
     total_time_steps: 120000
     summary_freq: 1000
     device: cuda
+  CountIntReward:
+    crwd_coef: 0.002

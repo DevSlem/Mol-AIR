@@ -1,14 +1,14 @@
-GSK3B_JNK3-PPO:
+Similarity-LIR:
   Agent:
-    type: PPO
+    type: RND
     n_steps: 64
     epoch: 6
     seq_len: 35
     seq_mini_batch_size: 16
     gamma: 1.0
+    nonepi_adv_coef: 0.1
   Env:
-    gsk3b_coef: 0.5
-    jnk3_coef: 0.5
+    similarity_coef: 1.0
   Train:
     num_envs: 64
     seed: 0

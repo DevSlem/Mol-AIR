@@ -2,39 +2,59 @@ import multiprocessing as mp
 from abc import ABC, abstractmethod
 from enum import Enum
 from multiprocessing.connection import Connection
-from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Generic, TypeVar
 
 import numpy as np
-import torch
 
+T = TypeVar('T')
+
+def env_config(
+    name: str,
+    obs_shape: Optional[Tuple[int, ...]] = None,
+    num_actions: Optional[int] = None,
+):
+    def decorator(cls: T) -> T:
+        if not issubclass(cls, Env):
+            raise TypeError("Class must inherit from Env")
+        cls.name = name
+        if obs_shape is not None:
+            cls.obs_shape = obs_shape
+        if num_actions is not None:
+            cls.num_actions = num_actions
+        return cls
+    return decorator
 
 class Env(ABC):
+    name: str
+    obs_shape: Tuple[int, ...]
+    num_actions: int
+    
     @abstractmethod 
-    def reset(self) -> torch.Tensor:
+    def reset(self) -> np.ndarray:
         """
         Resets the environment to an initial state and returns the initial observation.
 
         Returns:
-            obs (Tensor): `(num_envs, *obs_shape)`. Initial observation.
+            obs (ndarray): `(num_envs, *obs_shape)`. Initial observation.
         """
         raise NotImplementedError
     
     @abstractmethod
     def step(
         self, 
-        action: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
+        action: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict]:
         """
         Takes a step in the environment using an action.
 
         Args:
-            - action (Tensor): `(num_envs, num_actions)`. Action provided by the agent.
+            - action (ndarray): `(num_envs, num_actions)`. Action provided by the agent.
 
         Returns:
-            - next_obs (Tensor): `(num_envs, *obs_shape)`. Next observation which is automatically reset to the first observation of the next episode. 
-            - reward (Tensor): `(num_envs, 1)`. Scalar reward values.
-            - terminated (Tensor): `(num_envs, 1)`. Whether the episode is terminated.
-            - real_final_next_obs (Tensor): `(num_terminated_envs, *obs_shape)`. "Real" final next observation of the episode. You can access only if any environment is terminated. 
+            - next_obs (ndarray): `(num_envs, *obs_shape)`. Next observation which is automatically reset to the first observation of the next episode. 
+            - reward (ndarray): `(num_envs,)`. Scalar reward values.
+            - terminated (ndarray): `(num_envs,)`. Whether the episode is terminated.
+            - real_final_next_obs (ndarray): `(num_terminated_envs, *obs_shape)`. "Real" final next observation of the episode. You can access only if any environment is terminated. 
             - info (dict): Additional information.
         """
         raise NotImplementedError
@@ -45,29 +65,8 @@ class Env(ABC):
         raise NotImplementedError
     
     @property
-    @abstractmethod
-    def obs_shape(self) -> Tuple[int, ...]:
-        raise NotImplementedError
-    
-    @property
-    @abstractmethod
-    def num_actions(self) -> int:
-        raise NotImplementedError
-    
-    @property
-    @abstractmethod
     def num_envs(self) -> int:
-        raise NotImplementedError
-    
-    @property
-    def log_data(self) -> Dict[str, Tuple[float, Optional[float]]]:
-        """
-        The log data of the environment.
-
-        Returns:
-            Dict[str, Tuple[float, float]]: log_keys: (value, time)
-        """
-        return dict()
+        return 1
     
     @property
     def config_dict(self) -> dict:
@@ -88,8 +87,7 @@ class WorkerCommand(Enum):
     RESET = 0,
     STEP = 1,
     CLOSE = 2,
-    LOG_DATA = 3,
-    SAVE_DATA = 4,
+    SAVE_DATA = 3,
     
 class AsyncEnv(Env):    
     def __init__(self, env_make_func_iter: Iterable[EnvMakeFunc], trace_env: int = 0) -> None:
@@ -126,26 +124,26 @@ class AsyncEnv(Env):
             worker.start()
             child_conn.close()
         
-    def reset(self) -> torch.Tensor:
+    def reset(self) -> np.ndarray:
         for parent_conn in self._parent_connections:
             parent_conn.send((WorkerCommand.RESET, None))
         
         obs_tuple = tuple(parent_conn.recv() for parent_conn in self._parent_connections)
-        return torch.cat(obs_tuple, dim=0)
+        return np.concatenate(obs_tuple, axis=0)
     
     def step(
         self, 
-        action: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
+        action: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict]:
         for i, parent_conn in enumerate(self._parent_connections):
             parent_conn.send((WorkerCommand.STEP, action[i:i+1]))
             
         unwrapped_results = tuple(parent_conn.recv() for parent_conn in self._parent_connections)
         results_tuple = tuple(zip(*unwrapped_results))
-        concat_tensors = tuple(torch.cat(result, dim=0) for result in results_tuple[:-1])
+        concat_ndarrays = tuple(np.concatenate(result, axis=0) for result in results_tuple[:-1])
         info = self._merge_info(results_tuple[-1])
         
-        return concat_tensors + (info,) # type: ignore
+        return concat_ndarrays + (info,) # type: ignore
     
     def _merge_info(self, info_tuple: Tuple[dict, ...]) -> dict:
         num_envs = len(info_tuple)
@@ -196,10 +194,10 @@ class AsyncEnv(Env):
     def config_dict(self) -> dict:
         return self._config_dict
     
-    def _single_env_step(self, env_action: Tuple[Env, torch.Tensor]):
+    def _single_env_step(self, env_action: Tuple[Env, np.ndarray]):
         env = env_action[0]
         action = env_action[1]
-        return env.step(action.unsqueeze(dim=0))
+        return env.step(action[np.newaxis, ...])
     
     @staticmethod
     def _worker(
@@ -215,8 +213,8 @@ class AsyncEnv(Env):
                         raise ValueError('when you reset, data must be None.')
                     child.send(env.reset())
                 elif command == WorkerCommand.STEP:
-                    if not isinstance(data, torch.Tensor):
-                        raise ValueError(f'data must be torch.Tensor, but got {type(data)}.')
+                    if not isinstance(data, np.ndarray):
+                        raise ValueError(f'data must be np.ndarray, but got {type(data)}.')
                     child.send(env.step(data))
                 elif command == WorkerCommand.CLOSE:
                     if data is not None:
@@ -224,10 +222,6 @@ class AsyncEnv(Env):
                     env.close()
                     child.send(None)
                     break
-                elif command == WorkerCommand.LOG_DATA:
-                    if data is not None:
-                        raise ValueError('when you log data, data must be None.')
-                    child.send(env.log_data)
                 elif command == WorkerCommand.SAVE_DATA:
                     if not isinstance(data, str):
                         raise ValueError(f'since data is directory, it must be str, but got {type(data)}.')
@@ -238,3 +232,41 @@ class AsyncEnv(Env):
             raise ex
         finally:
             pass
+
+class EnvWrapper(Env):
+    def __init__(self, env: Env) -> None:
+        self._env = env
+    
+    def reset(self) -> np.ndarray:
+        return self._env.reset()
+    
+    def step(
+        self, 
+        action: np.ndarray
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict]:
+        return self._env.step(action)
+    
+    def close(self):
+        self._env.close()
+    
+    @property
+    def obs_shape(self) -> Tuple[int, ...]:
+        return self._env.obs_shape
+    
+    @property
+    def num_actions(self) -> int:
+        return self._env.num_actions
+    
+    @property
+    def num_envs(self) -> int:
+        return self._env.num_envs
+    
+    @property
+    def config_dict(self) -> dict:
+        return self._env.config_dict
+    
+    def save_data(self, base_dir: str):
+        self._env.save_data(base_dir)
+    
+    def __getattr__(self, name):
+        return getattr(self._env, name)
