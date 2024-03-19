@@ -29,6 +29,7 @@ Packages:
 * [RDKit](https://pypi.org/project/rdkit/2022.9.5/): 2022.9.5
 * [PyTDC](https://pypi.org/project/PyTDC/0.4.0/): 0.4.0
 * [NetworkX](https://pypi.org/project/networkx/2.6.3/): 2.6.3
+* [Pandas](https://pypi.org/project/pandas/1.3.5/): 1.3.5
 
 Activate Python 3.7 environment (e.g., conda) and install the required packages (only linux):
 
