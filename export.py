@@ -1,9 +1,10 @@
-import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
+import argparse
 import numpy as np
 import pandas as pd
+from matplotlib.patches import Patch
+import matplotlib.pyplot as plt
 
-from util import try_create_dir, moving_average
+from util import try_create_dir, moving_average, load_yaml
 
 def make_plot_figure(x_vals_list, y_vals_list, labels, x_label, y_label, ylim=None):
     fig, ax = plt.subplots()
@@ -61,24 +62,6 @@ def anoot_val(x, y, ax=None):
               bbox=bbox_props, ha="right", va="bottom")
     ax.annotate(text, xy=(x, y), xytext=(0.94,0.96), **kw)
 
-# def fill_values(x, y):
-#     result_x = []
-#     result_y = []
-    
-#     for i in range(len(x) - 1):
-#         # Create an array for x values from current x to the next x (excluding the next x)
-#         new_x = np.arange(x[i], x[i+1])
-#         result_x.extend(new_x)
-
-#         # Extend the y values based on the length of the new x values
-#         new_y = np.full(shape=new_x.shape, fill_value=y[i])
-#         result_y.extend(new_y)
-
-#     # Append the last values from x and y
-#     result_x.append(x[-1])
-#     result_y.append(y[-1])
-    
-#     return np.array(result_x), np.array(result_y)
 
 def best_score_figure(episode_metrics, title, labels):
     fig, ax = plt.subplots()
@@ -224,7 +207,6 @@ def total_avg_int_reward_figure(
     total_mean = total_y_vals.mean()
     total_std = total_y_vals.std()
     ylim = total_mean + 3 * total_std
-    print(f"Total mean: {total_mean}, Total std: {total_std}")
     fig, _ = make_plot_figure(
         x_vals_list,
         y_vals_list,
@@ -255,70 +237,76 @@ def best_comparison_table(episode_metrics, labels) -> pd.DataFrame:
     return comparison_df
 
 if __name__ == '__main__':
-    title = input("Enter the property: ")
-    N = int(input(f"Enter the number of results: "))
-    result_dir_list = []
+    parser = argparse.ArgumentParser()
+    parser.add_argument('TITLE', type=str, help='Title for the data')
+    parser.add_argument('EXPERIMENT_RESULT_DIR', nargs='+', type=str, help='Directories of experiment results')
+    parser.add_argument('-e', '--episode', type=int, help='Episode number (default = max)', default=None)
+    parser.add_argument('-m', '--moving_average', type=int, help='Moving average n (default = max_episode / 100)', default=None)
+    
+    args = parser.parse_args()
+
+    title = args.TITLE
+    experiment_result_dirs = args.EXPERIMENT_RESULT_DIR
+    episode = args.episode
+    moving_average_n = args.moving_average
+    
     labels = []
     count_coefs = []
     rnd_coefs = []
-    for i in range(N):
-        result_dir_list.append(input(f"Enter the result directory ({i + 1}): "))
-        labels.append(input(f"Enter the label ({i + 1}): "))
-        try:
-            count_coefs.append(float(input(f"Enter the count coefficient ({i + 1}): ")))
-        except ValueError:
-            pass
-        try:
-            rnd_coefs.append(float(input(f"Enter the rnd coefficient ({i + 1}): ")))
-        except ValueError:
-            pass
-    max_episode = input("Enter the maximum episode (default = max): ")
-    max_episode = int(max_episode) if max_episode != "" else None
-    n = input("Enter the moving average n (default = max_episode / 100): ")
-    export_dir = input("Enter the export directory (default = exports): ")
-    if export_dir == "":
-        export_dir = "exports"
-        
-    print("Exporting...")
+    for d in experiment_result_dirs:
+        config_dict = load_yaml(f"{d}/config.yaml")
+        label = tuple(config_dict.keys())[0]
+        labels.append(label)
+        config_dict = config_dict[label]
+        if "CountIntReward" in config_dict and "crwd_coef" in config_dict["CountIntReward"]:
+            count_coefs.append(config_dict["CountIntReward"]["crwd_coef"])
+        if "nonepi_adv_coef" in config_dict["Agent"]:
+            rnd_coefs.append(config_dict["Agent"]["nonepi_adv_coef"])
     
     episode_metrics = []
-    for result_dir in result_dir_list:
-        episode_metrics.append(pd.read_csv(f"{result_dir}/episode_metric.csv"))
-        
-    if max_episode is None:
-        max_episode = min(df["episode"].max() for df in episode_metrics)
-    n = max_episode // 100 if n == "" else int(n)
-        
-    episode_metrics = [df[df["episode"] <= max_episode] for df in episode_metrics]
+    for d in experiment_result_dirs:
+        episode_metrics.append(pd.read_csv(f"{d}/episode_metric.csv"))
+    
+    if episode is None:
+        episode = min([df["episode"].max() for df in episode_metrics])
+    
+    if moving_average_n is None:
+        moving_average_n = episode // 100
+    
+    episode_metrics = [df[df["episode"] <= episode] for df in episode_metrics]
     episode_metrics = [df.sort_values(by=["episode", "env_id"]) for df in episode_metrics]
 
-    fig1, fig2 = avg_score_figure(episode_metrics, title, labels, n)
-    fig3 = best_score_figure(episode_metrics, title, labels)
-    avg_count_int_reward_figs = avg_int_reward_figure(episode_metrics, title, labels, "Count", n)
-    avg_rnd_int_reward_figs = avg_int_reward_figure(episode_metrics, title, labels, "RND", n)
-    total_avg_int_reward_figs = total_avg_int_reward_figure(
+    avg_score_fig, moving_avg_score_fig = avg_score_figure(episode_metrics, title, labels, moving_average_n)
+    best_score_fig = best_score_figure(episode_metrics, title, labels)
+    avg_count_int_reward_figs = avg_int_reward_figure(episode_metrics, title, labels, "Count", moving_average_n)
+    avg_rnd_int_reward_figs = avg_int_reward_figure(episode_metrics, title, labels, "RND", moving_average_n)
+    avg_int_reward_figs = total_avg_int_reward_figure(
         episode_metrics,
         title,
         labels,
-        n,
+        moving_average_n,
         count_coefs,
         rnd_coefs
     )
-    comparison_df = best_comparison_table(episode_metrics, labels)
+    best_comparison_df = best_comparison_table(episode_metrics, labels)
+    
+    export_dir = f"exports/{title}"
     
     try_create_dir(export_dir)
     
-    fig1.savefig(f"{export_dir}/average_scores.png")
-    fig2.savefig(f"{export_dir}/moving_average_scores.png")
-    fig3.savefig(f"{export_dir}/best_scores.png")
+    avg_score_fig.savefig(f"{export_dir}/avg_score.png")
+    moving_avg_score_fig.savefig(f"{export_dir}/moving_avg_score.png")
+    best_score_fig.savefig(f"{export_dir}/best_score.png")
     if avg_count_int_reward_figs is not None:
-        avg_count_int_reward_figs[0].savefig(f"{export_dir}/avg_count_int_rewards.png")
-        avg_count_int_reward_figs[1].savefig(f"{export_dir}/moving_avg_count_int_rewards.png")
+        avg_count_int_reward_figs[0].savefig(f"{export_dir}/avg_count_int_reward.png")
+        avg_count_int_reward_figs[1].savefig(f"{export_dir}/moving_avg_count_int_reward.png")
     if avg_rnd_int_reward_figs is not None:
-        avg_rnd_int_reward_figs[0].savefig(f"{export_dir}/avg_rnd_int_rewards.png")
-        avg_rnd_int_reward_figs[1].savefig(f"{export_dir}/moving_avg_rnd_int_rewards.png")
-    if total_avg_int_reward_figs is not None:
-        total_avg_int_reward_figs[0].savefig(f"{export_dir}/avg_int_rewards.png")
-        total_avg_int_reward_figs[1].savefig(f"{export_dir}/moving_avg_int_rewards.png")
-        total_avg_int_reward_figs[2].savefig(f"{export_dir}/avg_int_rewards_bar.png")
-    comparison_df.to_csv(f"{export_dir}/best_molecule_comparison.csv", index=False)
+        avg_rnd_int_reward_figs[0].savefig(f"{export_dir}/avg_rnd_int_reward.png")
+        avg_rnd_int_reward_figs[1].savefig(f"{export_dir}/moving_avg_rnd_int_reward.png")
+    if avg_int_reward_figs is not None:
+        avg_int_reward_figs[0].savefig(f"{export_dir}/avg_int_reward.png")
+        avg_int_reward_figs[1].savefig(f"{export_dir}/moving_avg_int_reward.png")
+        avg_int_reward_figs[2].savefig(f"{export_dir}/avg_int_reward_bar.png")
+    best_comparison_df.to_csv(f"{export_dir}/best_comparison.csv", index=False)
+    
+    print(f"Exported to {export_dir}")

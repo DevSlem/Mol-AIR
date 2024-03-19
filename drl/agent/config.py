@@ -28,7 +28,7 @@ class RecurrentPPORNDConfig:
     seq_len: int
     seq_mini_batch_size: Optional[int] = None
     padding_value: float = 0.0
-    gamma: float = 0.999
+    gamma: float = 0.99
     gamma_n: float = 0.99
     nonepi_adv_coef: float = 1.0
     lam: float = 0.95
