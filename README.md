@@ -1,10 +1,10 @@
 # Mol-AIR
 
-This repository is the implementation of our paper (not published yet): 
+This repository is the implementation of our paper: 
 
-Mol-AIR: Molecular Reinforcement Learning with Adaptive Intrinsic Reward for Goal-directed Molecular Generation
+[Mol-AIR: Molecular Reinforcement Learning with Adaptive Intrinsic Reward for Goal-directed Molecular Generation](https://arxiv.org/abs/2403.20109)
 
-We optimized the pLogP score and could find sulfur-phosphorus-nitrogen chain using Mol-AIR:
+We optimized the pLogP score using Mol-AIR without any prior knowledge and could find sulfur-phosphorus-nitrogen chain:
 
 ![](img/molair-fig6.jpg)
 
@@ -187,8 +187,8 @@ We highly recommend to set the coefficient value to `1.0` for the property you w
 |Setting|Description|
 |---|---|
 |`num_envs`|(`int`) The number of parallel environments.|
-|`total_time_steps`|(`int`) The number of total time steps to train.|
-|`summary_freq`|(`int \| None`, default = `None`) Summary frequency. Defaults to `time_steps` / `20`.|
+|`total_time_steps`|(`int`) The number of total time steps to train. The number of total experiences is `total_time_steps` * `num_envs`.|
+|`summary_freq`|(`int \| None`, default = `None`) Summary frequency. Defaults to `total_time_steps` / `20`.|
 |`agent_save_freq`|(`int \| None`, default = `None`) Agent save frequency. Defaults to `summary_freq` * `10`.|
 |`seed`|(`int \| None`, default = `None`) Random seed.|
 |`device`|(`str \| None`, default = `None`) Device on which the agent works. If this setting is `None`, the agent device is same as your network's one. Otherwise, the network device changes to this device. <br><br> Options: `None`, `cpu`, `cuda`, `cuda:0` and other devices of `torch.device()` argument|
@@ -201,14 +201,22 @@ We highly recommend to set the coefficient value to `1.0` for the property you w
 |Setting|Description|
 |---|---|
 |`crwd_coef`|(`float`, default = `0.0`) Count-based intrinsic reward coefficient. It is equal to $\alpha\beta$ in the context of our paper.|
-|`max_mol_count`|(`int`, default = `10`) Maximum count $\tau$ of the same molecule. The count start from 0.|
+|`max_mol_count`|(`int`, default = `10`) Maximum count $\tau$ of the same molecule. The count starts from 0.|
 |`fingerprint_bits`|(`int`, default = `256`)|
 |`fingerprint_radius`|(`int`, default = `2`)|
 |`lsh_bits`|(`int`, default = `32`)|
 
-## References for Source Codes and Data
+## Citation
 
-[1] [aspuru-guzik-group/curiosity (Github)](https://github.com/aspuru-guzik-group/curiosity)  
-[2] [kengz/SLM-Lab (Github)](https://github.com/kengz/SLM-Lab)  
-[3] [jcwleo/random-network-distillation-pytorch (Github)](https://github.com/jcwleo/random-network-distillation-pytorch)  
-[4] [openai/gym (Github)](https://github.com/openai/gym)  
+Please cite our work if you find it useful:
+
+```
+@misc{park2024molair,
+      title={Mol-AIR: Molecular Reinforcement Learning with Adaptive Intrinsic Rewards for Goal-directed Molecular Generation}, 
+      author={Jinyeong Park and Jaegyoon Ahn and Jonghwan Choi and Jibum Kim},
+      year={2024},
+      eprint={2403.20109},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+```
