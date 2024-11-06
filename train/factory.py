@@ -1,14 +1,18 @@
-from envs.chem_env import make_async_chem_env
-from envs import Env
-import drl.agent as agent
-import drl
-from train.train import Train
-from util import instance_from_dict
-import train.net as net
-import torch.optim as optim
 from dataclasses import dataclass
 from typing import Optional
+
+import torch
+import torch.optim as optim
+
+import drl
+import drl.agent as agent
+import train.net as net
 import util
+from envs import Env
+from envs.chem_env import make_async_chem_env
+from train.train import Train
+from util import instance_from_dict
+
 
 class ConfigParsingError(Exception):
     pass
@@ -18,9 +22,10 @@ class CommonConfig:
     num_envs: int = 1
     seed: Optional[int] = None
     device: Optional[str] = None
-    learning_rate: float = 1e-3
+    lr: float = 1e-3
     grad_clip_max_norm: float = 5.0
-
+    pretrained_path: Optional[str] = None
+    num_inference_envs: int = 0
 
 class MolRLTrainFactory:
     """
@@ -51,12 +56,14 @@ class MolRLTrainFactory:
         self._train_config = self._config.get("Train", dict())
         self._count_int_reward_config = self._config.get("CountIntReward", dict())
         self._common_config = instance_from_dict(CommonConfig, self._train_config)
+        self._pretrained = None
         
     def create_train(self) -> Train:
         self._train_setup()
         
         try:
             env = self._create_env()
+            inference_env = self._create_inference_env()
         except TypeError:
             raise ConfigParsingError("Invalid Env config. Missing arguments or wrong type.")
         try:
@@ -68,6 +75,7 @@ class MolRLTrainFactory:
                 "env": env,
                 "agent": agent,
                 "id": self._id,
+                "inference_env": inference_env,
                 **self._train_config,
             })
         except TypeError:
@@ -83,12 +91,26 @@ class MolRLTrainFactory:
         
         if self._common_config.seed is not None:
             util.seed(self._common_config.seed)
+            
+        if self._common_config.pretrained_path is not None:
+            self._pretrained = torch.load(self._common_config.pretrained_path)
         
     def _create_env(self) -> Env:
         env = make_async_chem_env(
             num_envs=self._common_config.num_envs,
             seed=self._common_config.seed,
-            **{**self._env_config, **self._count_int_reward_config}
+            **{**self._env_config, **self._count_int_reward_config, "vocabulary": self._pretrained["vocabulary"] if self._pretrained is not None else None}
+        )
+        return env
+    
+    def _create_inference_env(self) -> Optional[Env]:
+        if self._common_config.num_inference_envs == 0:
+            return None
+        
+        env = make_async_chem_env(
+            num_envs=self._common_config.num_inference_envs,
+            seed=self._common_config.seed,
+            **{**self._env_config, "vocabulary": self._pretrained["vocabulary"] if self._pretrained is not None else None}
         )
         return env
     
@@ -107,9 +129,11 @@ class MolRLTrainFactory:
             env.obs_shape[0],
             env.num_actions
         )
+        if self._pretrained is not None:
+            network.load_state_dict(self._pretrained["model"], strict=False)
         trainer = drl.Trainer(optim.Adam(
             network.parameters(),
-            lr=self._common_config.learning_rate
+            lr=self._common_config.lr
         )).enable_grad_clip(network.parameters(), max_norm=self._common_config.grad_clip_max_norm)
         
         return agent.RecurrentPPO(
@@ -126,9 +150,11 @@ class MolRLTrainFactory:
             env.obs_shape[0],
             env.num_actions
         )
+        if self._pretrained is not None:
+            network.load_state_dict(self._pretrained["model"], strict=False)
         trainer = drl.Trainer(optim.Adam(
             network.parameters(),
-            lr=self._common_config.learning_rate
+            lr=self._common_config.lr
         )).enable_grad_clip(network.parameters(), max_norm=self._common_config.grad_clip_max_norm)
         
         return agent.RecurrentPPORND(

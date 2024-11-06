@@ -86,7 +86,7 @@ class logger:
             raise LoggerException("logger is already disabled")
         
     @classmethod
-    def print(cls, message: str, prefix: str = "[SELFIES-RND] "):
+    def print(cls, message: str, prefix: str = "[Mol-AIR] "):
         builtins.print(f"{prefix}{message}")
         if cls._log_file is not None:
             cls._log_file.log_msg_file.write(f"{prefix}{message}\n")
