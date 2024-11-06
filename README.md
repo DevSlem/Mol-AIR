@@ -213,7 +213,7 @@ RND has unique settings (**RND only**):
 
 |Setting|Type|Default|Description|
 |---|---|---|---|
-|`crwd_coef`||`float`|`0.0`|Count-based intrinsic reward coefficient. It is equal to $\alpha\beta$ in the context of our paper.|
+|`crwd_coef`|`float`|`0.0`|Count-based intrinsic reward coefficient. It is equal to $\alpha\beta$ in the context of our paper.|
 |`max_mol_count`|`int`|`10`|Maximum count $\tau$ of the same molecule. The count starts from 0.|
 |`fingerprint_bits`|`int`|`256`||
 |`fingerprint_radius`|`int`|`2`||
