@@ -82,6 +82,9 @@ class RecurrentPPO(Agent):
         
         if self._trajectory.reached_n_steps:
             self._train()
+            
+    def inference_agent(self, num_envs: int = 1, device: Optional[str] = None) -> Agent:
+        return RecurrentPPOInference(self._network, num_envs, device or str(self.device))
     
     def _train(self):
         exp_batch = self._trajectory.sample()
@@ -211,3 +214,31 @@ class RecurrentPPO(Agent):
             self._actor_average_loss.reset()
             self._critic_average_loss.reset()
         return ld
+
+@agent_config(name="Recurrent PPO Inference")
+class RecurrentPPOInference(Agent):
+    def __init__(self, network: RecurrentPPONetwork, num_envs: int, device: Optional[str] = None) -> None:
+        super().__init__(num_envs, network, device)
+        
+        self._network = network
+        
+        hidden_state_shape = (network.hidden_state_shape()[0], self._num_envs, network.hidden_state_shape()[1])
+        self._hidden_state = torch.zeros(hidden_state_shape, device=self.device)
+        self._next_hidden_state = torch.zeros(hidden_state_shape, device=self.device)
+        self._prev_terminated = torch.zeros(self._num_envs, 1, device=self.device)
+        
+    @torch.no_grad()
+    def select_action(self, obs: torch.Tensor) -> torch.Tensor:
+        self._hidden_state = self._next_hidden_state * (1.0 - self._prev_terminated)
+        policy_dist_seq, _, next_hidden_state = self._network.forward(
+            obs.unsqueeze(dim=1),
+            self._hidden_state
+        )
+        self._next_hidden_state = next_hidden_state
+        return policy_dist_seq.sample().squeeze(dim=1)
+    
+    def update(self, exp: Experience) -> Optional[dict]:
+        self._prev_terminated = exp.terminated
+
+    def inference_agent(self, num_envs: int = 1, device: Optional[str] = None) -> Agent:
+        return RecurrentPPOInference(self._network, num_envs, device or str(self.device))

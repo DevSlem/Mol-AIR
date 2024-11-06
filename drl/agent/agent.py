@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Optional, TypeVar, Type, Callable
 
 import torch
+import torch.nn as nn
 
 from drl.exp import Experience
 from drl.net import Network
@@ -62,10 +63,27 @@ class Agent(ABC):
         """
         raise NotImplementedError()
     
-    @property
     @abstractmethod
-    def config_dict(self) -> dict:
+    def inference_agent(self, num_envs: int = 1, device: Optional[str] = None) -> "Agent":
+        """
+        Create an inference agent.
+
+        Args:
+            num_envs (int, optional): The number of environments for inference. Defaults to 1.
+            device (Optional[str], optional): Defaults to `Agent` device.
+
+        Returns:
+            Agent: inference agent
+        """
         raise NotImplementedError
+    
+    @property
+    def config_dict(self) -> dict:
+        return dict()
+    
+    @property
+    def model(self) -> nn.Module:
+        return self._model
     
     @property
     def device(self) -> torch.device:
