@@ -4,16 +4,45 @@ import numpy as np
 import selfies as sf
 
 
+def selfies_alphabet() -> List[str]:
+    try:
+        return ["[#N]"] + sf.selfies_alphabet()
+    except AttributeError:
+        pass
+    
+    try:
+        return list(sf.get_semantic_robust_alphabet())
+    except AttributeError:
+        pass
+    
+    raise AttributeError("We highly recommend the selfies package version either 0.2.4 or 2.1.1.")
+
+def split_selfies(selfies: str) -> List[str]:
+    return list('[' + character for character in selfies.split('['))[1:]
+
 class SelfiesTokenizer:
-    def __init__(self) -> None:
+    def __init__(self, vocabulary: Optional[Iterable[str]] = None) -> None:
         self._stop_token = "[STOP]"
-        self._selfies_tokens = ["[#N]"] + sf.selfies_alphabet() + [self._stop_token]
-        self._token_to_value_dict = {token: i for i, token in enumerate(self._selfies_tokens)}
+        if vocabulary is None:
+            self._selfies_vocab = selfies_alphabet() + [self._stop_token]
+        else:
+            # vocabulary = set(vocabulary)
+            if len(set(vocabulary)) != len(list(vocabulary)):
+                raise ValueError("The vocabulary contains duplicate tokens.")
+                
+            self._selfies_vocab = list(vocabulary)
+            if self._stop_token not in set(vocabulary):
+                self._selfies_vocab.append(self._stop_token)
+        self._token_to_value_dict = {token: i for i, token in enumerate(self._selfies_vocab)}
         self._padding_value = -1
         
     @property
-    def n_tokens(self) -> int:
-        return len(self._selfies_tokens)
+    def vocabulary(self) -> List[str]:
+        return list(self._selfies_vocab)
+        
+    @property
+    def vocab_size(self) -> int:
+        return len(self._selfies_vocab)
     
     @property
     def stop_token(self) -> str:
@@ -23,7 +52,7 @@ class SelfiesTokenizer:
     def stop_token_val(self) -> int:
         return self._token_to_value_dict[self._stop_token]
         
-    def encode(self, selfies_list: Union[str, List[str]], seq_len: Optional[int] = None) -> np.ndarray:
+    def encode(self, selfies_list: Union[str, List[str]], seq_len: Optional[int] = None, include_stop_token: bool = False) -> np.ndarray:
         """
         Encode the SELFIES strings to the integer sequences. 
         The integer sequences are padded with the padding value `-1`.
@@ -31,14 +60,15 @@ class SelfiesTokenizer:
         Args:
             selfies_list (str | List[str]): one SELFIES string or `batch_size` SELFIES strings list.
             seq_len (Optional[int], optional): The length of the sequence. If None, the maximum length of the SELFIES strings is used. Defaults to None.
+            include_stop_token (bool, optional): Whether to include the stop token at the end of the sequence. Defaults to False.
 
         Returns:
             encoded_sequences (ndarray): `(seq_len,)` or `(batch_size, seq_len)`
         """
         if isinstance(selfies_list, str):
             selfies_list = [selfies_list]
-            return self._encode_batch(selfies_list, seq_len)[0]
-        return self._encode_batch(selfies_list, seq_len)
+            return self._encode_batch(selfies_list, seq_len, include_stop_token)[0]
+        return self._encode_batch(selfies_list, seq_len, include_stop_token)
     
     def decode(self, encoded_sequences: np.ndarray, include_stop_token: bool = True) -> Union[str, List[str]]:
         """
@@ -47,6 +77,7 @@ class SelfiesTokenizer:
 
         Args:
             encoded_sequences (ndarray): `(seq_len,)` or `(batch_size, seq_len)`
+            include_stop_token (bool, optional): Whether to include the stop token if it is present in the sequence. Defaults to True.
 
         Returns:
             selfies_list (str | List[str]): one SELFIES string or `batch_size` SELFIES strings list.
@@ -104,8 +135,11 @@ class SelfiesTokenizer:
             return self._from_one_hot_batch(one_hot)[0]
         return self._from_one_hot_batch(one_hot)
     
-    def _encode_batch(self, selfies_list: Iterable[str], seq_len: Optional[int]) -> np.ndarray:
+    def _encode_batch(self, selfies_list: Iterable[str], seq_len: Optional[int], include_stop_token: bool) -> np.ndarray:
         selfies_tokens_list = [self._split_selfies(selfies) for selfies in selfies_list]
+        if include_stop_token:
+            for selfies_tokens in selfies_tokens_list:
+                selfies_tokens.append(self._stop_token)
         if seq_len is None:
             seq_len = max(len(selfies_tokens) for selfies_tokens in selfies_tokens_list)
         encoded_list = [self._encode_from_tokens(selfies_tokens, seq_len) for selfies_tokens in selfies_tokens_list]
@@ -129,7 +163,7 @@ class SelfiesTokenizer:
                 break
             if not include_stop_token and idx == self._token_to_value_dict[self._stop_token]:
                 break
-            string += self._selfies_tokens[idx]
+            string += self._selfies_vocab[idx]
         return string
     
     def _last_token_value_batch(self, encoded_sequences: np.ndarray) -> np.ndarray:
@@ -142,7 +176,7 @@ class SelfiesTokenizer:
         return last_token
     
     def _to_one_hot_batch(self, encoded_sequences: np.ndarray) -> np.ndarray:
-        one_hot = np.zeros((encoded_sequences.shape[0], encoded_sequences.shape[1], self.n_tokens), dtype=np.int64)
+        one_hot = np.zeros((encoded_sequences.shape[0], encoded_sequences.shape[1], self.vocab_size), dtype=np.int64)
         for i, encoded in enumerate(encoded_sequences):
             for j, idx in enumerate(encoded):
                 if idx != self._padding_value:
