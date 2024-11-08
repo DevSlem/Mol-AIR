@@ -6,6 +6,58 @@ import torch
 from drl.net import RecurrentNetwork
 from drl.policy_dist import CategoricalDist
 
+class PretrainedRecurrentNetwork(RecurrentNetwork):
+    """
+    Pretrained recurrent network.
+    """
+    
+    @abstractmethod
+    def forward(
+        self, 
+        obs_seq: torch.Tensor, 
+        hidden_state: torch.Tensor
+    ) -> Tuple[CategoricalDist, torch.Tensor]:
+        """
+        ## Summary
+        
+        Feed forward method to compute policy distribution using the recurrent network.
+        
+        It's recommended to set your recurrent network to `batch_first=True`.
+
+        Args:
+            obs_seq (Tensor): observation sequences
+            hidden_state (Tensor): hidden states at the beginning of each sequence
+
+        Returns:
+            policy_dist_seq (CategoricalDist): policy distribution sequences
+            next_seq_hidden_state (Tensor): hidden state which will be used for the next sequence
+            
+        ## Input/Output Details
+        
+        |Input|Shape|
+        |:---|:---|
+        |obs_seq|`(seq_batch_size, seq_len, *obs_shape)`|
+        |hidden_state|`(D x num_layers, seq_batch_size, H)`|
+        
+        Output:
+        
+        |Output|Shape|
+        |:---|:---|
+        |policy_dist_seq|`*batch_shape` = `(seq_batch_size, seq_len)`, details in `PolicyDist` docs|
+        |next_seq_hidden_state|`(D x num_layers, seq_batch_size, H)`|
+        
+        Refer to the following explanation:
+        
+        * `seq_batch_size`: the size of sequence batch
+        * `seq_len`: the length of each sequence
+        * `num_layers`: the number of recurrent layers
+        * `D`: 2 if bidirectional otherwise 1
+        * `H`: the value depends on the type of the recurrent network
+        
+        When you use LSTM, `H` = `H_cell` + `H_out`. See details in https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html. 
+        When you use GRU, `H` = `H_out`. See details in https://pytorch.org/docs/stable/generated/torch.nn.GRU.html.
+        """
+        raise NotImplementedError
 
 class RecurrentPPONetwork(RecurrentNetwork):
     """
