@@ -12,6 +12,7 @@ from envs import Env
 from envs.chem_env import make_async_chem_env
 from train.train import Train
 from util import instance_from_dict
+from train.inference import Inference
 
 
 class ConfigParsingError(Exception):
@@ -120,6 +121,8 @@ class MolRLTrainFactory:
             return self._create_ppo_agent(env)
         elif agent_type == "rnd":
             return self._create_rnd_agent(env)
+        elif agent_type == "pretrained":
+            return self._create_pretrained_agent(env)
         else:
             raise ValueError(f"Unknown agent type: {agent_type}")
     
@@ -165,3 +168,169 @@ class MolRLTrainFactory:
             device=self._common_config.device
         )
         
+    def _create_pretrained_agent(self, env: Env) -> agent.PretrainedRecurrentAgent:
+        assert env.obs_shape[0] == env.num_actions
+        network = net.SelfiesPretrainedNet(
+            env.num_actions,
+        )
+        if self._pretrained is not None:
+            network.load_state_dict(self._pretrained["model"], strict=False)
+        return agent.PretrainedRecurrentAgent(
+            network=network,
+            num_envs=self._common_config.num_envs,
+            device=self._common_config.device
+        )
+        
+class MolRLInferenceFactory:
+    @staticmethod
+    def from_yaml(file_path: str) -> "MolRLInferenceFactory":
+        """
+        Create a MolRLTrainFactory from a YAML file.
+        """
+        try:
+            config_dict = util.load_yaml(file_path)
+        except FileNotFoundError:
+            raise ConfigParsingError(f"Config file not found: {file_path}")
+        
+        try:
+            config_id = tuple(config_dict.keys())[0]
+        except:
+            raise ConfigParsingError("YAML config file must start with the training ID.")
+        config = config_dict[config_id]
+        return MolRLInferenceFactory(config_id, config)
+    
+    def __init__(self, id: str, config: dict):
+        self._id = id
+        self._config = config
+        self._agent_config = self._config.get("Agent", dict())
+        self._env_config = self._config.get("Env", dict())
+        self._train_config = self._config.get("Train", dict())
+        self._inference_config = self._config.get("Inference", dict())
+        self._common_config = instance_from_dict(CommonConfig, self._train_config)
+        self._pretrained = None
+        
+    def create_inference(self) -> Inference:
+        self._inference_setup()
+        
+        try:
+            env = self._create_env()
+        except TypeError:
+            raise ConfigParsingError("Invalid Env config. Missing arguments or wrong type.")
+        try:
+            agent = self._create_agent(env)
+            agent = self._load_agent(agent)
+            agent = agent.inference_agent(num_envs=env.num_envs, device=self._inference_config.get("device", self._common_config.device))
+        except TypeError:
+            raise ConfigParsingError("Invalid Agent config. Missing arguments or wrong type.")
+        try:
+            inference = instance_from_dict(Inference, {
+                "env": env,
+                "agent": agent,
+                "id": self._id,
+                **self._inference_config,
+            })
+        except TypeError:
+            raise ConfigParsingError("Invalid Train config. Missing arguments or wrong type.")
+        return inference
+        
+    def _inference_setup(self):
+        if "seed" in self._inference_config:
+            util.seed(self._inference_config["seed"])
+            
+        if self._common_config.pretrained_path is not None:
+            self._pretrained = torch.load(self._common_config.pretrained_path)
+        
+    def _create_env(self) -> Env:
+        env = make_async_chem_env(
+            num_envs=self._inference_config.get("num_envs", 1),
+            seed=self._inference_config.get("seed", None),
+            **{**self._env_config, "vocabulary": self._pretrained["vocabulary"] if self._pretrained is not None else None}
+        )
+        return env
+    
+    def _create_agent(self, env: Env) -> agent.Agent:
+        agent_type = self._agent_config["type"].lower()
+        if agent_type == "ppo":
+            return self._create_ppo_agent(env)
+        elif agent_type == "rnd":
+            return self._create_rnd_agent(env)
+        elif agent_type == "pretrained":
+            return self._create_pretrained_agent(env)
+        else:
+            raise ValueError(f"Unknown agent type: {agent_type}")
+        
+    def _create_ppo_agent(self, env: Env) -> agent.RecurrentPPO:
+        config = instance_from_dict(agent.RecurrentPPOConfig, self._agent_config)
+        network = net.SelfiesRecurrentPPONet(
+            env.obs_shape[0],
+            env.num_actions
+        )
+        if self._pretrained is not None:
+            network.load_state_dict(self._pretrained["model"], strict=False)
+        trainer = drl.Trainer(optim.Adam(
+            network.parameters(),
+            lr=self._common_config.lr
+        )).enable_grad_clip(network.parameters(), max_norm=self._common_config.grad_clip_max_norm)
+        
+        return agent.RecurrentPPO(
+            config=config,
+            network=network,
+            trainer=trainer,
+            num_envs=self._common_config.num_envs,
+            device=self._common_config.device
+        )
+    
+    def _create_rnd_agent(self, env: Env) -> agent.RecurrentPPORND:
+        config = instance_from_dict(agent.RecurrentPPORNDConfig, self._agent_config)
+        network = net.SelfiesRecurrentPPORNDNet(
+            env.obs_shape[0],
+            env.num_actions
+        )
+        if self._pretrained is not None:
+            network.load_state_dict(self._pretrained["model"], strict=False)
+        trainer = drl.Trainer(optim.Adam(
+            network.parameters(),
+            lr=self._common_config.lr
+        )).enable_grad_clip(network.parameters(), max_norm=self._common_config.grad_clip_max_norm)
+        
+        return agent.RecurrentPPORND(
+            config=config,
+            network=network,
+            trainer=trainer,
+            num_envs=self._common_config.num_envs,
+            device=self._common_config.device
+        )
+        
+    def _create_pretrained_agent(self, env: Env) -> agent.PretrainedRecurrentAgent:
+        assert env.obs_shape[0] == env.num_actions
+        network = net.SelfiesPretrainedNet(
+            env.num_actions,
+        )
+        if self._pretrained is not None:
+            network.load_state_dict(self._pretrained["model"], strict=False)
+        return agent.PretrainedRecurrentAgent(
+            network=network,
+            num_envs=self._common_config.num_envs,
+            device=self._common_config.device
+        )
+        
+    def _load_agent(self, agent: agent.Agent) -> agent.Agent:
+        ckpt = self._inference_config.get("ckpt", "best")
+        util.logger.enable(self._id, enable_log_file=False)
+        
+        if ckpt == "best":
+            ckpt_path = f"{util.logger.dir()}/best_agent.pt"
+        elif ckpt == "final":
+            ckpt_path = f"{util.logger.dir()}/agent.pt"
+        elif isinstance(ckpt, int):
+            ckpt_path = f"{util.logger.dir()}/agent_{ckpt}.pt"
+
+        util.logger.disable()
+        
+        try:
+            state_dict = torch.load(ckpt_path)
+        except FileNotFoundError:
+            raise ConfigParsingError(f"Checkpoint file not found: {ckpt_path}")
+        
+        agent.load_state_dict(state_dict["agent"])
+        return agent

@@ -69,6 +69,10 @@ class Train:
         if not logger.enabled():
             logger.enable(self._id, enable_log_file=False)
             
+        if self._time_steps == self._total_time_steps:
+            self._save_train()
+            return self
+            
         self._load_train()
         
         if self._time_steps >= self._total_time_steps:  
@@ -125,7 +129,8 @@ class Train:
                     
                 # save the agent
                 if self._time_steps % self._agent_save_freq == 0:
-                    self._save_train()
+                    score = self._inference(self._n_inference_episodes)
+                    self._save_train(score)
                     last_agent_save_t = self._time_steps
             logger.print(f"Training is finished.")
             if self._time_steps > last_agent_save_t:
@@ -140,6 +145,10 @@ class Train:
     def close(self):
         self._enabled = False
         self._env.close()
+        
+        if self._inference_env is not None:
+            self._inference_env.close()
+        
         if logger.enabled():
             logger.disable()
             
@@ -161,12 +170,13 @@ class Train:
             values=metric_info_dict["values"],
         )
         
-    def _write_metric_dicts(self, metric_dicts):
+    def _write_metric_dicts(self, metric_dicts, include_time_step=False):
         for metric_dict in metric_dicts:
             if metric_dict is None:
                 continue
             for metric_name, metric_info in metric_dict.items():
-                metric_info["values"]["time_step"] = self._time_steps
+                if include_time_step:
+                    metric_info["values"]["time_step"] = self._time_steps
                 if metric_name not in self._metric_csv_sync_writer_dict:
                     self._metric_csv_sync_writer_dict[metric_name] = self._make_csv_sync_writer(metric_name, metric_info)
                 if not any(value_field in set(self._metric_csv_sync_writer_dict[metric_name].value_fields) for value_field in metric_info["values"].keys()):
@@ -178,7 +188,7 @@ class Train:
             
     def _process_info_dict(self, env_info: dict, agent_info: Optional[dict]):        
         if "metric" in env_info: 
-            self._write_metric_dicts(env_info["metric"])
+            self._write_metric_dicts(env_info["metric"], True)
                 
         if agent_info is not None and "metric" in agent_info:
             self._write_metric_dicts(agent_info["metric"])
@@ -252,10 +262,10 @@ class Train:
         
         for key, (value, t) in self._agent.log_data.items():
             logger.log_data(key, value, t)
+            
+        logger.plot_logs()
                     
-    def _save_train(self):
-        score = self._inference(self._n_inference_episodes)
-        
+    def _save_train(self, score=None):
         train_dict = dict(
             time_steps=self._time_steps,
             episodes=self._episodes,
@@ -337,6 +347,8 @@ class Train:
         logger.log_data("Inference/Score", avg_score, self._time_steps)
         logger.log_data("Inference/Diversity", diversity, self._time_steps)
         logger.log_data("Inference/Uniqueness", uniqueness, self._time_steps)
+        
+        logger.plot_logs()
             
         self._agent.model.train()
         

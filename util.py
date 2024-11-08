@@ -21,6 +21,8 @@ from io import TextIOWrapper
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
+from tbparse import SummaryReader
+import matplotlib.pyplot as plt
 
 T = TypeVar("T")
 
@@ -103,6 +105,37 @@ class logger:
         if cls._log_dir is None:
             raise LoggerException("logger is not enabled")
         return cls._log_dir
+    
+    @classmethod
+    def plot_logs(cls):
+        if cls._log_file is None:
+            raise LoggerException("you need to enable the logger with enable_log_file option")
+        cls._log_file.tb_logger.flush()
+        
+        # Read the logs
+        reader = SummaryReader(cls.dir())
+        
+        # Get the DataFrame
+        df = reader.scalars
+        
+        unique_tags = df["tag"].unique()
+        
+        for tag in unique_tags:
+            elements = tag.split('/')
+            file_name = elements[-1]
+            dir_path = os.path.join(cls.dir(), "plots", *elements[:-1])
+            os.makedirs(dir_path, exist_ok=True)
+            file_path = os.path.join(dir_path, f"{file_name}.png")
+            
+            df_scalar = df[df["tag"] == tag]
+            plt.figure()
+            plt.plot(df_scalar["step"], df_scalar["value"], marker="o")
+            plt.title(tag)
+            plt.xlabel("Step")
+            plt.ylabel("Value")
+            plt.grid(True)
+            plt.savefig(file_path)
+            plt.close()
 
 class TextInfoBox:
     def __init__(self, right_margin: int = 10) -> None:

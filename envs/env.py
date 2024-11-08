@@ -228,11 +228,18 @@ class AsyncEnv(Env):
                     child.send(env.save_data(data))
                 else:
                     raise NotImplementedError(f'command {command} is not implemented.')
+        except KeyboardInterrupt:
+            command, data = child.recv()
+            if command == WorkerCommand.CLOSE:
+                if data is not None:
+                    raise ValueError('when you close, data must be None.')
+                child.send(None)
         except Exception as ex:
             raise ex
         finally:
             pass
 
+                
 class EnvWrapper(Env):
     def __init__(self, env: Env) -> None:
         self._env = env

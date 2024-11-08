@@ -104,7 +104,7 @@ class SelfiesEmbeddedConcatRND(nn.Module):
     
 # ==================================================================================================== #
 
-class SelfiesPretrainedNet(nn.Module, net.RecurrentNetwork):
+class SelfiesPretrainedNet(nn.Module, agent.PretrainedRecurrentNetwork):
     def __init__(self, vocab_size: int) -> None:
         super().__init__()
         
