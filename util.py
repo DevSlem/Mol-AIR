@@ -1,9 +1,10 @@
 import builtins
-import warnings
-from dataclasses import dataclass
-from typing import Generic, Iterable, Optional, Tuple, Type, TypeVar, List, Callable, Union
-from collections import defaultdict
 import csv
+import warnings
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import (Callable, Generic, Iterable, List, Optional, Tuple, Type,
+                    TypeVar, Union)
 
 import yaml
 
@@ -12,17 +13,22 @@ from torch.utils.tensorboard.writer import SummaryWriter
 
 warnings.filterwarnings(action="default")
 import inspect
+import json
 import os
 import random
 import sys
 from contextlib import contextmanager
 from io import TextIOWrapper
 
+import matplotlib.pyplot as plt
 import numpy as np
+import selfies as sf
 import torch
 import torch.backends.cudnn as cudnn
+from rdkit import Chem
+from rdkit.Chem import Draw
 from tbparse import SummaryReader
-import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 T = TypeVar("T")
 
@@ -129,7 +135,7 @@ class logger:
             
             df_scalar = df[df["tag"] == tag]
             plt.figure()
-            plt.plot(df_scalar["step"], df_scalar["value"], marker="o")
+            plt.plot(df_scalar["step"], df_scalar["value"])
             plt.title(tag)
             plt.xlabel("Step")
             plt.ylabel("Value")
@@ -388,3 +394,49 @@ class CSVSyncWriter:
         with open(self._file_path, "w") as f:
             writer = csv.DictWriter(f, fieldnames=self.fields)
             writer.writeheader()
+            
+def draw_molecules(smiles_list: List[str], scores: Optional[List[float]] = None, mols_per_row: int = 5, title: str = ""):
+    molecules = [Chem.MolFromSmiles(smiles) for smiles in smiles_list]
+    labels = [f"SMILES: {smiles}" for smiles in smiles_list]
+    if scores is not None:
+        if len(molecules) != len(scores):
+            raise ValueError(f"The number of molecules and scores must be the same, but got {len(molecules)} and {len(scores)}")
+        labels = [f"{label}\nScore: {score}" for label, score in zip(labels, scores)]
+    try:
+        return Draw.MolsToGridImage(molecules, molsPerRow=mols_per_row, subImgSize=(500, 500), legends=labels)
+    except ImportError:
+        raise ImportError("You cannot draw molecules due to the lack of libXrender.so.1. Install it with `sudo apt-get install libxrender1` or `conda install -c conda-forge libxrender`.")
+    
+def save_vocab(vocab: List[str], max_str_len: int, file_path: str):
+    with open(file_path, "w") as f:
+        json.dump({"vocabulary": vocab, "max_str_len": max_str_len}, f, indent=4)
+        
+def load_vocab(file_path: str) -> Tuple[List[str], int]:
+    with open(file_path, "r") as f:
+        data = json.load(f)
+    return data["vocabulary"], data["max_str_len"]
+
+def save_smiles_or_selfies(smiles_or_selfies_list: List[str], file_path: str):
+    with open(file_path, "w") as f:
+        for smiles_or_selfies in smiles_or_selfies_list:
+            f.write(f"{smiles_or_selfies}\n")
+
+def load_smiles_or_selfies(file_path: str) -> List[str]:
+    with open(file_path, "r") as f:
+        return f.read().splitlines()
+    
+def to_selfies(smiles_or_selfies_list: List[str], verbose: bool = True) -> List[str]:
+    if smiles_or_selfies_list[0].count("[") > 0:
+        return smiles_or_selfies_list
+    
+    smiles_or_selfies_iter = tqdm(smiles_or_selfies_list, desc="Converting SMILES to SELFIES") if verbose else smiles_or_selfies_list
+    selfies_list = [sf.encoder(s) for s in smiles_or_selfies_iter]
+    return selfies_list
+
+def to_smiles(smiles_or_selfies_list: List[str], verbose: bool = True) -> List[str]:
+    if smiles_or_selfies_list[0].count("[") == 0:
+        return smiles_or_selfies_list
+    
+    smiles_or_selfies_iter = tqdm(smiles_or_selfies_list, desc="Converting SELFIES to SMILES") if verbose else smiles_or_selfies_list
+    smiles_list = [sf.decoder(s) for s in smiles_or_selfies_iter]
+    return smiles_list # type: ignore
