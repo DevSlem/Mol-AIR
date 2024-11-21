@@ -1,6 +1,6 @@
 import time
 from queue import Queue
-from typing import Optional
+from typing import Optional, List
 
 import numpy as np
 import pandas as pd
@@ -8,10 +8,10 @@ import torch
 
 import drl
 import drl.agent as agent
-import metric
+from metric import MolMetric
 from drl.util import IncrementalMean
 from envs import Env
-from util import CSVSyncWriter, TextInfoBox, logger, try_create_dir
+from util import CSVSyncWriter, TextInfoBox, logger, to_smiles, try_create_dir
 
 
 class Train:
@@ -27,6 +27,7 @@ class Train:
         agent_save_freq: Optional[int] = None,
         inference_env: Optional[Env] = None,
         n_inference_episodes: int = 1,
+        smiles_or_selfies_refset: Optional[List[str]] = None,
     ) -> None:
         self._env = env
         self._agent = agent
@@ -37,6 +38,7 @@ class Train:
         self._agent_save_freq = self._summary_freq * 10 if agent_save_freq is None else agent_save_freq
         self._inference_env = inference_env
         self._n_inference_episodes = n_inference_episodes
+        self._smiles_or_selfies_refset = smiles_or_selfies_refset
         
         self._dtype = torch.float32
         self._device = self._agent.device
@@ -50,6 +52,7 @@ class Train:
         
         self._cumulative_reward_mean = IncrementalMean()
         self._episode_len_mean = IncrementalMean()
+        self._mol_metric = MolMetric()
                 
         # helps to synchronize final molecule results of each episode
         self._metric_csv_sync_writer_dict = dict()
@@ -82,7 +85,16 @@ class Train:
         logger.disable()
         logger.enable(self._id, enable_log_file=True)
         
-        self._print_train_info()            
+        try:
+            if self._smiles_or_selfies_refset is not None:
+                logger.print(f"Preprocessing the SMILES reference set ({len(self._smiles_or_selfies_refset)}) for the molecular metric...")
+                smiles_refset = to_smiles(self._smiles_or_selfies_refset)
+                self._mol_metric.preprocess(smiles_refset=smiles_refset)
+            
+            self._print_train_info()
+        except KeyboardInterrupt:
+            logger.print(f"Training is interrupted.")
+            return self
         
         try:
             obs = self._env.reset()
@@ -251,12 +263,20 @@ class Train:
             info = "episode has not terminated yet"
         else:
             score = current_metric_df["score"].mean()
-            diversity = metric.calc_diversity(current_metric_df["smiles"].tolist())
-            uniqueness = metric.calc_uniqueness(current_metric_df["smiles"].tolist())
+            self._mol_metric.preprocess(smiles_generated=current_metric_df["smiles"].tolist())
+            diversity = self._mol_metric.calc_diversity()
+            uniqueness = self._mol_metric.calc_uniqueness()
             info = f"score: {score:.3f}, diversity: {diversity:.3f}, uniqueness: {uniqueness:.3f}"
             logger.log_data("Environment/Score", score, self._time_steps)
             logger.log_data(f"Environment/Diversity", diversity, self._time_steps)
             logger.log_data(f"Environment/Uniqueness", uniqueness, self._time_steps)
+            
+            try:
+                novelty = self._mol_metric.calc_novelty()
+                info += f", novelty: {novelty:.3f}"
+                logger.log_data(f"Environment/Novelty", novelty, self._time_steps)
+            except ValueError:
+                pass
             
         logger.print(f"training time: {self._real_time:.2f}, time steps: {self._time_steps}/{self._total_time_steps}, {info}")
         
@@ -340,14 +360,21 @@ class Train:
             return None
             
         avg_score = np.mean(score_list)
-        diversity = metric.calc_diversity(smiles_list)
-        uniqueness = metric.calc_uniqueness(smiles_list)
-        logger.print(f"=== Inference ({self._time_steps} steps) -> # molecules: {len(score_list)}, score: {avg_score:.3f}, diversity: {diversity:.3f}, uniqueness: {uniqueness:.3f} ===")
-        
+        self._mol_metric.preprocess(smiles_generated=smiles_list)
+        diversity = self._mol_metric.calc_diversity()
+        uniqueness = self._mol_metric.calc_uniqueness()
+        info = f"Inference ({self._time_steps} steps) -> # molecules: {len(score_list)}, score: {avg_score:.3f}, diversity: {diversity:.3f}, uniqueness: {uniqueness:.3f}"
         logger.log_data("Inference/Score", avg_score, self._time_steps)
         logger.log_data("Inference/Diversity", diversity, self._time_steps)
         logger.log_data("Inference/Uniqueness", uniqueness, self._time_steps)
+        try:
+            novelty = self._mol_metric.calc_novelty()
+            info += f", novelty: {novelty:.3f}"
+            logger.log_data("Inference/Novelty", novelty, self._time_steps)
+        except ValueError:
+            pass
         
+        logger.print(f"=== {info} ===")
         logger.plot_logs()
             
         self._agent.model.train()

@@ -142,13 +142,41 @@ The details of configuration variables are described below.
 |`total_time_steps`|`int`||The number of total time steps to train. The number of total experiences is `total_time_steps` * `num_envs`.|
 |`summary_freq`|`int \| None`|`None`|Summary frequency. Defaults to `total_time_steps` / `20`.|
 |`agent_save_freq`|`int \| None`|`None`|Agent save frequency. Inference is performed at this frequency. Defaults to `summary_freq` * `10`.|
-|`num_inference_envs`|`int`|`1`|The number of parallel environments for inference. If you have a lower performance CPU or small amount of memory, we highly recommend that the value is lower.|
+|`num_inference_envs`|`int`|`0`|The number of parallel environments for inference. If you have a lower performance CPU or small amount of memory, we highly recommend that the value is lower. Defaults to no inference.|
 |`n_inference_episodes`|`int`|`1`|The total number of episodes for inference. The greater `num_inference_envs` is, the faster `n_inference_episodes` is reached. We highly recommend that the value is greater.|
-|`pretrained_path`|`str \| None`|`None`|Pre-trained model path. Defaults to training from scratch.|
 |`seed`|`int \| None`|`None`|Random seed.|
 |`lr`|`float`|`1e-3`|Learning rate. This default value is for training from scratch. If you optimize a pre-trained model with the default value, **policy collapse (catatrophic forgetting)** may occur due to the large learning rate.|
 |`grad_clip_max_norm`|`float`|`5.0`|Maximum gradient norm.|
+|`pretrained_path`|`str \| None`|`None`|Pre-trained model path with the `.pt` extension. If you don't specify the path explicitly, it train either the pre-trained model `[EXPERIMENT_RESULT_DIR]/pretrained_models/best.pt` or from the scratch.|
+|`refset_path`|`str \| None`|`None`|Reference set path for calculating novelty metric. Typically, the reference set is the training set. Defaults to no reference set.|
 |`device`|`str \| None`|`None`|Device on which the agent works. If this setting is `None`, the agent device is same as your network's one. Otherwise, the network device changes to this device. <br><br> Options: `None`, `cpu`, `cuda`, `cuda:0` and other devices of `torch.device()` argument|
+
+### Inference
+
+`Inference` section contains the settings for the inference process after training.
+
+|Setting|Type|Default|Description|
+|---|---|---|---|
+|`num_envs`|`int`|`1`|The number of parallel environments for inference. It speeds up the inference process.|
+|`n_episodes`|`int`|`1`|The total number of episodes (generated molecules). The greater `num_envs` is, the faster `n_episodes` is reached. We highly recommend that the value is larger.|
+|`ckpt`|`str \| int`|`best`|Checkpoint name or step number. If the value is `best`, the best checkpoint `best_agent.pt` is used. If the value is `final`, `agent.pt` is used. Otherwise, the checkpoint with the step number is used.|
+|`refset_path`|`str \| None`|`None`|Reference set path for calculating novelty metric. Typically, the reference set is the training set. Defaults to `Train.refset_path`.|
+|`seed`|`int \| None`|`None`|Random seed.|
+|`device`|`str \| None`|`None`|Device on which the agent works. Defaults to `Train.device`.|
+
+### Pretrain
+
+`Pretrain` section contains the settings for the pre-training process.
+
+|Setting|Type|Default|Description|
+|---|---|---|---|
+|`dataset_path`|`str`||Dataset path for pre-training. It doesn't matter whether the dataset is SMILES or SELFIES.|
+|`epoch`|`int`|`50`|The number of epochs to train.|
+|`batch_size`|`int`|`256`|Batch size.|
+|`lr`|`float`|`1e-3`|Learning rate.|
+|`device`|`str \| None`|`None`|Device on which the pre-trained network works. Defaults to `cpu`.|
+|`seed`|`int \| None`|`None`|Random seed.|
+|`save_agent`|`bool`|`True`|Whether to save the pre-trained agent `agent.pt` by wrapping the best network with `PretrainedRecurrentAgent` at the end of the pre-training.|
 
 ### Env
 
@@ -164,6 +192,7 @@ The details of configuration variables are described below.
 |`drd2_coef`|`float`|`0.0`|DRD2 score coefficient.|
 |`sa_coef`|`float`|`0.0`|Synthetic accessibility (SA) score coefficient.|
 |`max_str_len`|`int`|`35`|Maximum length of SELFIES strings. If you optimize your pre-trained model, we highly recommend that the value is the **maximum sequence length** without `[STOP]` token in the pre-training dataset.|
+|`vocab_path`|`str \| None`|`None`|Vocabulary path for SELFIES. It overwrites `max_str_len`. Defaults to SELFIES default alphabets.|
 
 We highly recommend to set the coefficient value to `1.0` for the property you want to optimize. For example, if you want to optimize the pLogP score, set `plogp_coef` to `1.0` and the other coefficients to `0.0`. If you want to optimize multiple properties at the same time, we recommend that the weighted sum of the values is `1.0`.
 
@@ -173,10 +202,9 @@ We highly recommend to set the coefficient value to `1.0` for the property you w
 
 |Setting|Type|Default|Description|
 |---|---|---|---|
-|`type`|`str`||Which agent to use. <br><br> Options: `PPO`, `RND`|
+|`type`|`str`||Which agent to use. <br><br> Options: `PPO`, `RND`, `Pretrained`|
 
-
-Since both PPO and RND use recurrent neural networks, you should consider sequence-based settings to train the agent:
+`Pretrained` agent has no additional settings. Since both PPO and RND use recurrent neural networks, you should consider sequence-based settings to train the agent:
 
 |Setting|Type|Default|Description|
 |---|---|---|---|

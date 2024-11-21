@@ -1,20 +1,29 @@
 import argparse
-from train import MolRLTrainFactory, MolRLInferenceFactory
+from train import MolRLTrainFactory, MolRLInferenceFactory, MolRLPretrainFactory
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("config_path", type=str, help="path to config file")
     parser.add_argument("-i", "--inference", action="store_true", help="inference mode")
+    parser.add_argument("-p", "--pretrain", action="store_true", help="pretrain mode")
     args = parser.parse_args()
     config_path = args.config_path
     
-    if not args.inference:
-        MolRLTrainFactory.from_yaml(config_path) \
-            .create_train() \
-            .train() \
+    # Pretraining
+    if args.pretrain:
+        MolRLPretrainFactory.from_yaml(config_path) \
+            .create_pretrain() \
+            .pretrain() \
             .close()
-    else:
+    # RL Inference
+    elif args.inference:
         MolRLInferenceFactory.from_yaml(config_path) \
             .create_inference() \
             .inference() \
+            .close()
+    # RL Training
+    else:
+        MolRLTrainFactory.from_yaml(config_path) \
+            .create_train() \
+            .train() \
             .close()

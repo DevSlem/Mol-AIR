@@ -1,4 +1,5 @@
 from collections import defaultdict
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -6,10 +7,10 @@ import torch
 from tqdm import tqdm
 
 import drl
-import metric
 from drl.agent import Agent
 from envs import Env
-from util import logger, try_create_dir
+from metric import MolMetric
+from util import draw_molecules, logger, to_smiles, try_create_dir
 
 
 class Inference:
@@ -19,12 +20,14 @@ class Inference:
         env: Env,
         agent: Agent,
         n_episodes: int = 1,
+        smiles_or_selfies_refset: Optional[List[str]] = None,
     ):
         self._id = id
         self._env = env
         self._agent = agent
         self._n_episodes = n_episodes
         self._device = agent.device
+        self._smiles_or_selfies_refset = smiles_or_selfies_refset
         
         self._dtype = torch.float32
         
@@ -85,8 +88,19 @@ class Inference:
         avg_scores = metric_df.mean(numeric_only=True)
             
         smiles_list = metric_df["smiles"].tolist()
-        avg_scores["diversity"] = metric.calc_diversity(smiles_list)
-        avg_scores["uniqueness"] = metric.calc_uniqueness(smiles_list)
+        if self._smiles_or_selfies_refset is not None:
+            logger.print(f"Calculating molecular metrics with the reference set ({len(self._smiles_or_selfies_refset)}) and the generated set ({n_valid})...")
+            smiles_refset = to_smiles(self._smiles_or_selfies_refset)
+            mol_metric = MolMetric().preprocess(smiles_refset=smiles_refset, smiles_generated=smiles_list)
+        else:
+            logger.print(f"Calculating molecular metrics with the generated set ({n_valid})...")
+            mol_metric = MolMetric().preprocess(smiles_generated=smiles_list)
+        try:
+            avg_scores["diversity"] = mol_metric.calc_diversity()
+            avg_scores["uniqueness"] = mol_metric.calc_uniqueness()
+            avg_scores["novelty"] = mol_metric.calc_novelty()
+        except ValueError:
+            pass
         
         try_create_dir(f"{logger.dir()}/inference")
         metric_df.to_csv(f"{logger.dir()}/inference/molecules.csv", index=False)
@@ -109,6 +123,13 @@ class Inference:
         best_row.index.name = "Metric"
         best_row.name = "Score"
         best_row.to_csv(f"{logger.dir()}/inference/best_molecule.csv", header=True)
+        
+        # draw top-50 molecules
+        top_50_df = metric_df.drop_duplicates("smiles").sort_values("score", ascending=False).head(50)
+        try:
+            draw_molecules(top_50_df["smiles"].tolist(), top_50_df["score"].tolist()).save(f"{logger.dir()}/inference/top_50_unique_molecules.png")
+        except ImportError as e:
+            logger.print(str(e))
         
         return self
     
