@@ -1,4 +1,4 @@
-GSK3B_JNK3-HIR:
+GSK3B+JNK3-PPO:
   Agent:
     type: PPO
     n_steps: 64
@@ -15,5 +15,3 @@ GSK3B_JNK3-HIR:
     total_time_steps: 120000
     summary_freq: 1000
     device: cuda
-  CountIntReward:
-    crwd_coef: 0.002

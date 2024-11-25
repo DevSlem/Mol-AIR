@@ -1,12 +1,11 @@
-GSK3B_JNK3-LIR:
+GSK3B+JNK3-HIR:
   Agent:
-    type: RND
+    type: PPO
     n_steps: 64
     epoch: 6
     seq_len: 35
     seq_mini_batch_size: 16
     gamma: 1.0
-    nonepi_adv_coef: 0.2
   Env:
     gsk3b_coef: 0.5
     jnk3_coef: 0.5
@@ -16,3 +15,5 @@ GSK3B_JNK3-LIR:
     total_time_steps: 120000
     summary_freq: 1000
     device: cuda
+  CountIntReward:
+    crwd_coef: 0.002

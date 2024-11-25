@@ -2,7 +2,7 @@
 torch==1.11.0+cu113
 tensorboard==2.11.2
 PyYAML==6.0
-selfies==0.2.4
+selfies==2.1.2
 rdkit==2022.9.5
 PyTDC==0.4.0
 networkx==2.6.3

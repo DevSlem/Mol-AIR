@@ -1,4 +1,4 @@
-GSK3B_JNK3-MolAIR:
+GSK3B+JNK3-MolAIR:
   Agent:
     type: RND
     n_steps: 64

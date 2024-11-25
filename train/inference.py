@@ -76,10 +76,10 @@ class Inference:
                 episodes += terminated.astype(int)
                 pbar.update(np.sum(terminated))
             
-        metric_df = pd.DataFrame(metric_list_dict)
-        metric_df = metric_df[:self._n_episodes]
-        n_total = len(metric_df)
-        metric_df.dropna(inplace=True)
+        original_metric_df = pd.DataFrame(metric_list_dict)
+        original_metric_df = original_metric_df[:self._n_episodes]
+        n_total = len(original_metric_df)
+        metric_df = original_metric_df.dropna()
         n_valid = len(metric_df)
         if n_valid == 0:
             logger.print("No valid molecule is generated.")
@@ -103,7 +103,7 @@ class Inference:
             pass
         
         try_create_dir(f"{logger.dir()}/inference")
-        metric_df.to_csv(f"{logger.dir()}/inference/molecules.csv", index=False)
+        original_metric_df.to_csv(f"{logger.dir()}/inference/molecules.csv", index=False)
         
         avg_scores = pd.concat([pd.Series([n_total, n_valid], index=["n_total", "n_valid"]), avg_scores])
         avg_scores.index.name = "Metric"
