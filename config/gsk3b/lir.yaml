@@ -9,6 +9,7 @@ GSK3B-LIR:
     nonepi_adv_coef: 0.65
   Env:
     gsk3b_coef: 1.0
+    init_selfies: ['[C][C][C]', '[C][=C][C]', '[C][C][=N]', '[C][N][C]', '[C][O][C]']
   Train:
     num_envs: 64
     seed: 0

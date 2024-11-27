@@ -1,7 +1,11 @@
 import itertools
 from typing import List, Optional
 
-from moleval.metrics.metrics import internal_diversity, novelty, preprocess_gen
+from util import suppress_print
+
+with suppress_print():
+    from moleval.metrics.metrics import internal_diversity, novelty, preprocess_gen
+
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.DataStructs import TanimotoSimilarity

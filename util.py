@@ -211,16 +211,6 @@ def try_create_dir(directory):
     except OSError:
         print("Error: Failed to create the directory.")
 
-@contextmanager
-def suppress_stdout():
-    with open(os.devnull, "w") as devnull:
-        old_stdout = sys.stdout
-        sys.stdout = devnull
-        try:  
-            yield
-        finally:
-            sys.stdout = old_stdout
-
 class ItemUpdateFollower(Generic[T]):
     def __init__(self, init_item: T, include_init: bool = True):
         self._item = init_item
@@ -440,3 +430,17 @@ def to_smiles(smiles_or_selfies_list: List[str], verbose: bool = True) -> List[s
     smiles_or_selfies_iter = tqdm(smiles_or_selfies_list, desc="Converting SELFIES to SMILES") if verbose else smiles_or_selfies_list
     smiles_list = [sf.decoder(s) for s in smiles_or_selfies_iter]
     return smiles_list # type: ignore
+
+@contextmanager
+def suppress_print():
+    original_stdout = sys.stdout  # Save original stdout
+    original_stderr = sys.stderr  # Save original stderr
+    sys.stdout = open(os.devnull, 'w')  # Redirect stdout to /dev/null
+    sys.stderr = open(os.devnull, 'w')  # Redirect stderr to /dev/null
+    try:
+        yield
+    finally:
+        sys.stdout.close()  # Close redirected stdout
+        sys.stderr.close()  # Close redirected stderr
+        sys.stdout = original_stdout  # Restore original stdout
+        sys.stderr = original_stderr  # Restore original stderr

@@ -16,7 +16,7 @@ from envs.env import Env, EnvWrapper, env_config, AsyncEnv
 from envs.selfies_util import is_finished
 from envs.count_int_reward import CountIntReward
 from envs.selfies_tokenizer import SelfiesTokenizer
-from util import instance_from_dict
+from util import instance_from_dict, suppress_print
 
 from drl.util import IncrementalMean
 
@@ -117,7 +117,8 @@ class ChemEnv(Env):
         max_str_len: int = 35,
         seed: Optional[int] = None,
         env_id: Optional[int] = None,
-        vocabulary: Optional[Iterable[str]] = None
+        vocabulary: Optional[Iterable[str]] = None,
+        init_selfies: Optional[Union[str, List[str]]] = None
     ) -> None:
         self._config = ChemEnv.__Config(
             plogp_coef=plogp_coef,
@@ -135,18 +136,20 @@ class ChemEnv(Env):
         
         self._selfies_list = []
         self._tokenizer = SelfiesTokenizer(vocabulary)
+        self._init_selfies = init_selfies
         
         self._episode = -1
         
         self._fp1 = AllChem.GetMorganFingerprint(AllChem.MolFromSmiles('CC1=CC=C(C=C1)C1=CC(=NN1C1=CC=C(C=C1)S(N)(=O)=O)C(F)(F)F'), 2)
-        if self._config.gsk3b_coef > 0.0:
-            self._calc_gsk3b = Oracle(name='GSK3B')
-        if self._config.jnk3_coef > 0.0:
-            self._calc_jnk3 = Oracle(name='JNK3')
-        if self._config.drd2_coef > 0.0:
-            self._calc_drd2 = Oracle(name='DRD2')
-        if self._config.sa_coef > 0.0:
-            self._calc_sa = Oracle(name='SA')
+        with suppress_print():
+            if self._config.gsk3b_coef > 0.0:
+                self._calc_gsk3b = Oracle(name='GSK3B')
+            if self._config.jnk3_coef > 0.0:
+                self._calc_jnk3 = Oracle(name='JNK3')
+            if self._config.drd2_coef > 0.0:
+                self._calc_drd2 = Oracle(name='DRD2')
+            if self._config.sa_coef > 0.0:
+                self._calc_sa = Oracle(name='SA')
             
         self._prop_keys = self._config.enabled_props
         
@@ -207,16 +210,23 @@ class ChemEnv(Env):
         pass
     
     def _make_init_selfies_idxes(self) -> List[int]:
-        if (
-            self._config.similarity_coef > 0.0 # Similarity
-        ):
-            return self._tokenizer.encode(["[C]"])[0].tolist()
-        if (
-            self._config.gsk3b_coef > 0.0 # GSK3B
-            or self._config.jnk3_coef > 0.0 # JNK3
-        ):
-            selfies = self._np_rng.choice(['[C][C][C]', '[C][=C][C]', '[C][C][=N]', '[C][N][C]', '[C][O][C]'])
-            return self._tokenizer.encode([selfies])[0].tolist()
+        if self._init_selfies is not None:
+            if isinstance(self._init_selfies, str):
+                return self._tokenizer.encode(self._init_selfies).tolist()
+            elif isinstance(self._init_selfies, list):
+                selfies = self._np_rng.choice(self._init_selfies)
+                return self._tokenizer.encode(selfies).tolist()
+        
+        # if (
+        #     self._config.similarity_coef > 0.0 # Similarity
+        # ):
+        #     return self._tokenizer.encode("[C]").tolist()
+        # if (
+        #     self._config.gsk3b_coef > 0.0 # GSK3B
+        #     or self._config.jnk3_coef > 0.0 # JNK3
+        # ):
+        #     selfies = self._np_rng.choice(['[C][C][C]', '[C][=C][C]', '[C][C][=N]', '[C][N][C]', '[C][O][C]'])
+        #     return self._tokenizer.encode(selfies).tolist()
         
         return list()
     
@@ -268,6 +278,7 @@ class ChemEnv(Env):
             
         return reward, False
     
+    @suppress_print()
     def _calc_current_score(self) -> float:
         score = 0.0
         

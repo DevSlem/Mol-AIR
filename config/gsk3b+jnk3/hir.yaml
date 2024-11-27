@@ -9,6 +9,7 @@ GSK3B+JNK3-HIR:
   Env:
     gsk3b_coef: 0.5
     jnk3_coef: 0.5
+    init_selfies: ['[C][C][C]', '[C][=C][C]', '[C][C][=N]', '[C][N][C]', '[C][O][C]']
   Train:
     num_envs: 64
     seed: 0
