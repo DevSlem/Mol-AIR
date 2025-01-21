@@ -9,7 +9,7 @@ from tqdm import tqdm
 import drl
 from drl.agent import Agent
 from envs import Env
-from metric import MolMetric
+from metric import MolMetric, canonicalize
 from util import draw_molecules, logger, to_smiles, try_create_dir
 
 
@@ -20,12 +20,15 @@ class Inference:
         env: Env,
         agent: Agent,
         n_episodes: int = 1,
+        n_unique_molecules: Optional[int] = None,
         smiles_or_selfies_refset: Optional[List[str]] = None,
     ):
         self._id = id
         self._env = env
         self._agent = agent
         self._n_episodes = n_episodes
+        self._n_unique_molecules = n_unique_molecules
+        self._canonical_smiles_set = set()
         self._device = agent.device
         self._smiles_or_selfies_refset = smiles_or_selfies_refset
         
@@ -47,34 +50,64 @@ class Inference:
         
         obs = self._env.reset()
         
-        with tqdm(total=self._n_episodes, desc="Episode") as pbar:
-            while np.sum(episodes) < self._n_episodes:
-                obs = self._numpy_to_tensor(obs)
-                with torch.no_grad():
-                    action = self._agent.select_action(obs)
-                next_obs, reward, terminated, real_final_next_obs, env_info = self._env.step(action.detach().cpu().numpy())
+        pbar = tqdm(total=self._n_episodes, desc="Episode", leave=True)
+        if self._n_unique_molecules is not None:
+            unique_molecule_pbar = tqdm(total=self._n_unique_molecules, position=1, desc="Unique Molecule", leave=True)
+        else:
+            unique_molecule_pbar = None
+        
+        while np.sum(episodes) < self._n_episodes:
+            obs = self._numpy_to_tensor(obs)
+            with torch.no_grad():
+                action = self._agent.select_action(obs)
+            next_obs, reward, terminated, real_final_next_obs, env_info = self._env.step(action.detach().cpu().numpy())
+            
+            # update the agent
+            real_next_obs = next_obs.copy()
+            real_next_obs[terminated] = real_final_next_obs
+            real_next_obs = self._numpy_to_tensor(real_next_obs)
+            
+            exp = drl.Experience(
+                obs,
+                action,
+                real_next_obs,
+                self._numpy_to_tensor(reward[..., np.newaxis]),
+                self._numpy_to_tensor(terminated[..., np.newaxis]),
+            )
+            with torch.no_grad():
+                _ = self._agent.update(exp)
+                            
+            # update metrics
+            for key, value in self._inference_metric(env_info).items():
+                metric_list_dict[key].extend(value)
                 
-                # update the agent
-                real_next_obs = next_obs.copy()
-                real_next_obs[terminated] = real_final_next_obs
-                real_next_obs = self._numpy_to_tensor(real_next_obs)
-                
-                exp = drl.Experience(
-                    obs,
-                    action,
-                    real_next_obs,
-                    self._numpy_to_tensor(reward[..., np.newaxis]),
-                    self._numpy_to_tensor(terminated[..., np.newaxis]),
-                )
-                with torch.no_grad():
-                    _ = self._agent.update(exp)
-                                
-                for key, value in self._inference_metric(env_info).items():
-                    metric_list_dict[key].extend(value)
-                                
-                obs = next_obs
-                episodes += terminated.astype(int)
-                pbar.update(np.sum(terminated))
+                if unique_molecule_pbar is not None and key == "smiles":
+                    self._update_n_unique_molecules(value)
+                        
+            # take the next step       
+            obs = next_obs
+            episodes += terminated.astype(int)
+            n_terminated = np.sum(terminated)
+            if pbar.n + n_terminated > pbar.total:
+                pbar.total = pbar.n + n_terminated
+                pbar.refresh()
+            pbar.update(n_terminated)
+            
+            # update unique molecule progress bar
+            if unique_molecule_pbar is not None:
+                n_unique_molecules = self._update_n_unique_molecules()
+                if n_unique_molecules > unique_molecule_pbar.total:
+                    unique_molecule_pbar.total = n_unique_molecules
+                    unique_molecule_pbar.refresh()
+                unique_molecule_pbar.update(n_unique_molecules - unique_molecule_pbar.n)
+                if n_unique_molecules >= self._n_unique_molecules: # type: ignore
+                    break
+        
+        elapsed_time = pbar.format_dict["elapsed"]
+        
+        pbar.close()
+        if unique_molecule_pbar is not None:
+            unique_molecule_pbar.close()
             
         original_metric_df = pd.DataFrame(metric_list_dict)
         original_metric_df = original_metric_df[:self._n_episodes]
@@ -105,7 +138,7 @@ class Inference:
         try_create_dir(f"{logger.dir()}/inference")
         original_metric_df.to_csv(f"{logger.dir()}/inference/molecules.csv", index=False)
         
-        avg_scores = pd.concat([pd.Series([n_total, n_valid], index=["n_total", "n_valid"]), avg_scores])
+        avg_scores = pd.concat([pd.Series([n_total, n_valid, elapsed_time], index=["n_total", "n_valid", "time"]), avg_scores])
         avg_scores.index.name = "Metric"
         avg_scores.name = "Score"
         avg_scores.to_csv(f"{logger.dir()}/inference/metrics.csv", header=True)
@@ -165,3 +198,11 @@ class Inference:
     
     def _numpy_to_tensor(self, x: np.ndarray) -> torch.Tensor:
         return torch.from_numpy(x).to(device=self._device, dtype=self._dtype)
+    
+    def _update_n_unique_molecules(self, new_smiles_list: Optional[List[str]] = None) -> int:
+        if new_smiles_list is None:
+            return len(self._canonical_smiles_set)
+        
+        canonical_smiles = canonicalize(new_smiles_list)
+        self._canonical_smiles_set.update(canonical_smiles)
+        return len(self._canonical_smiles_set)

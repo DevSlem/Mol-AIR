@@ -1,0 +1,20 @@
+DRD2+QED+SA-Pretrained:
+  Agent:
+    type: Pretrained
+  Env:
+    drd2_coef: 0.3334
+    qed_coef: 0.3333
+    sa_coef: 0.3333
+    vocab_path: data/drd2+qed+sa/vocab.json
+  Train:
+    num_envs: 1
+    total_time_steps: 0
+    pretrained_path: data/drd2+qed+sa/pretrained.pt
+    device: cuda
+  Inference:
+    num_envs: 64
+    n_episodes: 10000
+    seed: 0
+    device: cuda
+    ckpt: final
+    refset_path: data/drd2+qed+sa/smiles.txt

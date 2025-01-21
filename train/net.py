@@ -167,12 +167,12 @@ class SelfiesRecurrentPPONet(nn.Module, agent.RecurrentPPONetwork):
         return policy_dist_seq, state_value_seq, next_seq_hidden_state
     
 class SelfiesRecurrentPPORNDNet(nn.Module, agent.RecurrentPPORNDNetwork):
-    def __init__(self, in_features: int, num_actions: int) -> None:
+    def __init__(self, in_features: int, num_actions: int, temperature: float = 1.0) -> None:
         super().__init__()
         
         # Actor-Critic
         self._actor_critic_shared_net = SelfiesRecurrentPPOSharedNet(in_features)
-        self._actor = CategoricalPolicy(self._actor_critic_shared_net.out_features, num_actions)
+        self._actor = CategoricalPolicy(self._actor_critic_shared_net.out_features, num_actions, temperature=temperature)
         self._ext_critic = nn.Linear(self._actor_critic_shared_net.out_features, 1)
         self._int_critic = nn.Linear(self._actor_critic_shared_net.out_features, 1)
         

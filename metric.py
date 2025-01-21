@@ -80,4 +80,4 @@ class MolMetric:
         return novelty(self.smiles_generated, self.smiles_refset, n_jobs=self._n_jobs(self.smiles_generated))
     
     def _n_jobs(self, smiles_or_mols_list) -> int:
-        return len(smiles_or_mols_list) // 1000 + 1
+        return min(len(smiles_or_mols_list) // 1000 + 1, 100)

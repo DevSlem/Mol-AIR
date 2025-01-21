@@ -315,9 +315,11 @@ class MolRLInferenceFactory:
     
     def _create_rnd_agent(self, env: Env) -> agent.RecurrentPPORND:
         config = instance_from_dict(agent.RecurrentPPORNDConfig, self._agent_config)
+        temperature = self._inference_config.get("temperature", 1.0)
         network = net.SelfiesRecurrentPPORNDNet(
             env.obs_shape[0],
-            env.num_actions
+            env.num_actions,
+            temperature=temperature
         )
         if self._pretrained is not None:
             network.load_state_dict(self._pretrained["model"], strict=False)
