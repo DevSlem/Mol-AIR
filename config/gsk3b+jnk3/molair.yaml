@@ -1,0 +1,21 @@
+GSK3B+JNK3-MolAIR:
+  Agent:
+    type: RND
+    n_steps: 64
+    epoch: 6
+    seq_len: 35
+    seq_mini_batch_size: 16
+    gamma: 1.0
+    nonepi_adv_coef: 0.2
+  Env:
+    gsk3b_coef: 0.5
+    jnk3_coef: 0.5
+    init_selfies: ['[C][C][C]', '[C][=C][C]', '[C][C][=N]', '[C][N][C]', '[C][O][C]']
+  Train:
+    num_envs: 64
+    seed: 0
+    total_time_steps: 120000
+    summary_freq: 1000
+    device: cuda
+  CountIntReward:
+    crwd_coef: 0.002

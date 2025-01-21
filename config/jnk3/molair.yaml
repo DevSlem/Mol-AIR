@@ -9,6 +9,7 @@ JNK3-MolAIR:
     nonepi_adv_coef: 0.05
   Env:
     jnk3_coef: 1.0
+    init_selfies: ['[C][C][C]', '[C][=C][C]', '[C][C][=N]', '[C][N][C]', '[C][O][C]']
   Train:
     num_envs: 64
     seed: 0

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, fields
-from typing import Optional, Tuple, TypeVar, Generic, Callable, Union, List
+from typing import Optional, Tuple, TypeVar, Generic, Callable, Union, List, Iterable
 from enum import Flag, auto
 import warnings
 
@@ -16,7 +16,7 @@ from envs.env import Env, EnvWrapper, env_config, AsyncEnv
 from envs.selfies_util import is_finished
 from envs.count_int_reward import CountIntReward
 from envs.selfies_tokenizer import SelfiesTokenizer
-from util import instance_from_dict
+from util import instance_from_dict, suppress_print
 
 from drl.util import IncrementalMean
 
@@ -34,6 +34,8 @@ class ChemEnv(Env):
         similarity_coef: float
         gsk3b_coef: float
         jnk3_coef: float
+        drd2_coef: float
+        sa_coef: float
         final_only: bool
         max_str_len: int
         
@@ -67,6 +69,8 @@ class ChemEnv(Env):
         similarity: T
         gsk3b: T
         jnk3: T
+        drd2: T
+        sa: T
         
         @staticmethod
         def new(default: Union[T, Callable[[], T]]) -> "ChemEnv.MoleculeProperty[T]":
@@ -88,6 +92,8 @@ class ChemEnv(Env):
         similarity="Similarity",
         gsk3b="GSK3B",
         jnk3="JNK3",
+        drd2="DRD2",
+        sa="SA"
     )
     
     @classmethod
@@ -105,10 +111,14 @@ class ChemEnv(Env):
         similarity_coef: float = 0.0,
         gsk3b_coef: float = 0.0,
         jnk3_coef: float = 0.0,
+        drd2_coef: float = 0.0,
+        sa_coef: float = 0.0,
         final_only: bool = False,
         max_str_len: int = 35,
         seed: Optional[int] = None,
-        env_id: Optional[int] = None
+        env_id: Optional[int] = None,
+        vocabulary: Optional[Iterable[str]] = None,
+        init_selfies: Optional[Union[str, List[str]]] = None
     ) -> None:
         self._config = ChemEnv.__Config(
             plogp_coef=plogp_coef,
@@ -116,6 +126,8 @@ class ChemEnv(Env):
             similarity_coef=similarity_coef,
             gsk3b_coef=gsk3b_coef,
             jnk3_coef=jnk3_coef,
+            drd2_coef=drd2_coef,
+            sa_coef=sa_coef,
             final_only=final_only,
             max_str_len=max_str_len
         )
@@ -123,20 +135,26 @@ class ChemEnv(Env):
         self._env_id = env_id
         
         self._selfies_list = []
-        self._tokenizer = SelfiesTokenizer()
+        self._tokenizer = SelfiesTokenizer(vocabulary)
+        self._init_selfies = init_selfies
         
         self._episode = -1
         
         self._fp1 = AllChem.GetMorganFingerprint(AllChem.MolFromSmiles('CC1=CC=C(C=C1)C1=CC(=NN1C1=CC=C(C=C1)S(N)(=O)=O)C(F)(F)F'), 2)
-        if self._config.gsk3b_coef > 0.0:
-            self._calc_gsk3b = Oracle(name='GSK3B')
-        if self._config.jnk3_coef > 0.0:
-            self._calc_jnk3 = Oracle(name='JNK3')
+        with suppress_print():
+            if self._config.gsk3b_coef > 0.0:
+                self._calc_gsk3b = Oracle(name='GSK3B')
+            if self._config.jnk3_coef > 0.0:
+                self._calc_jnk3 = Oracle(name='JNK3')
+            if self._config.drd2_coef > 0.0:
+                self._calc_drd2 = Oracle(name='DRD2')
+            if self._config.sa_coef > 0.0:
+                self._calc_sa = Oracle(name='SA')
             
         self._prop_keys = self._config.enabled_props
         
         self.obs_shape = (self._config.max_str_len,)
-        self.num_actions = self._tokenizer.n_tokens
+        self.num_actions = self._tokenizer.vocab_size
             
     def reset(self) -> np.ndarray:
         self._time_step = -1
@@ -182,7 +200,7 @@ class ChemEnv(Env):
         
         # if terminated, next_obs is reset to the first observation of the next episode
         if terminated:
-            info["metric"] = self._episode_metric_info_dict()
+            info["metric"] = self._episode_metric_info_dict(terminal_cond)
             info["valid_termination"] = not take_penalty
             next_obs = self.reset()
         
@@ -192,16 +210,23 @@ class ChemEnv(Env):
         pass
     
     def _make_init_selfies_idxes(self) -> List[int]:
-        if (
-            self._config.similarity_coef > 0.0 # Similarity
-        ):
-            return self._tokenizer.encode(["[C]"])[0].tolist()
-        if (
-            self._config.gsk3b_coef > 0.0 # GSK3B
-            or self._config.jnk3_coef > 0.0 # JNK3
-        ):
-            selfies = self._np_rng.choice(['[C][C][C]', '[C][=C][C]', '[C][C][=N]', '[C][N][C]', '[C][O][C]'])
-            return self._tokenizer.encode([selfies])[0].tolist()
+        if self._init_selfies is not None:
+            if isinstance(self._init_selfies, str):
+                return self._tokenizer.encode(self._init_selfies).tolist()
+            elif isinstance(self._init_selfies, list):
+                selfies = self._np_rng.choice(self._init_selfies)
+                return self._tokenizer.encode(selfies).tolist()
+        
+        # if (
+        #     self._config.similarity_coef > 0.0 # Similarity
+        # ):
+        #     return self._tokenizer.encode("[C]").tolist()
+        # if (
+        #     self._config.gsk3b_coef > 0.0 # GSK3B
+        #     or self._config.jnk3_coef > 0.0 # JNK3
+        # ):
+        #     selfies = self._np_rng.choice(['[C][C][C]', '[C][=C][C]', '[C][C][=N]', '[C][N][C]', '[C][O][C]'])
+        #     return self._tokenizer.encode(selfies).tolist()
         
         return list()
     
@@ -253,6 +278,7 @@ class ChemEnv(Env):
             
         return reward, False
     
+    @suppress_print()
     def _calc_current_score(self) -> float:
         score = 0.0
         
@@ -276,13 +302,23 @@ class ChemEnv(Env):
         
         # GSK3B
         if self._config.gsk3b_coef > 0.0:            
-            self._current_prop.gsk3b = self._calc_gsk3b([self._current_smiles,])[0] # type: ignore
+            self._current_prop.gsk3b = self._calc_gsk3b(self._current_smiles)
             score += self._config.gsk3b_coef * self._current_prop.gsk3b
         
         # JNK3
         if self._config.jnk3_coef > 0.0:
-            self._current_prop.jnk3 = self._calc_jnk3([self._current_smiles,])[0] # type: ignore
+            self._current_prop.jnk3 = self._calc_jnk3(self._current_smiles)
             score += self._config.jnk3_coef * self._current_prop.jnk3
+            
+        # DRD2
+        if self._config.drd2_coef > 0.0:
+            self._current_prop.drd2 = self._calc_drd2(self._current_smiles)
+            score += self._config.drd2_coef * self._current_prop.drd2
+            
+        # SA
+        if self._config.sa_coef > 0.0:
+            self._current_prop.sa = self._calc_sa(self._current_smiles)
+            score += self._config.sa_coef * (0.1 * (10 - self._current_prop.sa))
             
         warnings.filterwarnings("default")
         
@@ -295,7 +331,7 @@ class ChemEnv(Env):
             self._tokenizer.decode(self._encoded_selfies, include_stop_token=False)
         ) # type: ignore
         
-    def _episode_metric_info_dict(self) -> dict:
+    def _episode_metric_info_dict(self, terminal_cond: TerminalCondition) -> dict:
         metric_info_dict = dict()
         # keys
         metric_info_dict["keys"] = dict()
@@ -308,6 +344,7 @@ class ChemEnv(Env):
         for prop_name in self._prop_keys:
             metric_info_dict["values"][prop_name] = getattr(self._current_prop, prop_name)
         metric_info_dict["values"]["selfies"] = self._tokenizer.decode(self._encoded_selfies)
+        metric_info_dict["values"]["smiles"] = self._current_smiles
         return {"episode_metric": metric_info_dict}
     
 
@@ -317,9 +354,9 @@ class ChemEnvWrapper(EnvWrapper):
         
         self._count_int_reward = count_int_reward
         self._crwd_coef = crwd_coef
-        self._tokenizer = SelfiesTokenizer()
         
         self._avg_count_reward = IncrementalMean()
+        self._tokenizer = env._tokenizer
         
     def reset(self) -> np.ndarray:
         obs = super().reset()
@@ -356,7 +393,7 @@ class ChemEnvWrapper(EnvWrapper):
     
     @property
     def obs_shape(self) -> Tuple[int, ...]:
-        return (self._tokenizer.n_tokens,)
+        return (self._tokenizer.vocab_size,)
     
     def _last_token_one_hot(self, obs: np.ndarray) -> np.ndarray:
         """from the integer sequence to the one-hot of the last token"""

@@ -1,15 +1,18 @@
 import time
-from typing import Optional
 from queue import Queue
+from typing import Optional, List
 
-import torch
 import numpy as np
+import pandas as pd
+import torch
 
 import drl
 import drl.agent as agent
-from envs import Env
+from metric import MolMetric
 from drl.util import IncrementalMean
-from util import TextInfoBox, logger, try_create_dir, CSVSyncWriter
+from envs import Env
+from util import CSVSyncWriter, TextInfoBox, logger, to_smiles, try_create_dir
+
 
 class Train:
     _TRACE_ENV: int = 0
@@ -22,6 +25,9 @@ class Train:
         total_time_steps: int,
         summary_freq: Optional[int] = None,
         agent_save_freq: Optional[int] = None,
+        inference_env: Optional[Env] = None,
+        n_inference_episodes: int = 1,
+        smiles_or_selfies_refset: Optional[List[str]] = None,
     ) -> None:
         self._env = env
         self._agent = agent
@@ -30,9 +36,13 @@ class Train:
         self._total_time_steps = total_time_steps
         self._summary_freq = total_time_steps // 20 if summary_freq is None else summary_freq
         self._agent_save_freq = self._summary_freq * 10 if agent_save_freq is None else agent_save_freq
+        self._inference_env = inference_env
+        self._n_inference_episodes = n_inference_episodes
+        self._smiles_or_selfies_refset = smiles_or_selfies_refset
         
         self._dtype = torch.float32
         self._device = self._agent.device
+        self._best_score = float("-inf")
         
         self._time_steps = 0
         self._episodes = 0
@@ -42,6 +52,7 @@ class Train:
         
         self._cumulative_reward_mean = IncrementalMean()
         self._episode_len_mean = IncrementalMean()
+        self._mol_metric = MolMetric()
                 
         # helps to synchronize final molecule results of each episode
         self._metric_csv_sync_writer_dict = dict()
@@ -61,6 +72,10 @@ class Train:
         if not logger.enabled():
             logger.enable(self._id, enable_log_file=False)
             
+        if self._time_steps == self._total_time_steps:
+            self._save_train()
+            return self
+            
         self._load_train()
         
         if self._time_steps >= self._total_time_steps:  
@@ -70,7 +85,16 @@ class Train:
         logger.disable()
         logger.enable(self._id, enable_log_file=True)
         
-        self._print_train_info()            
+        try:
+            if self._smiles_or_selfies_refset is not None:
+                logger.print(f"Preprocessing the SMILES reference set ({len(self._smiles_or_selfies_refset)}) for the molecular metric...")
+                smiles_refset = to_smiles(self._smiles_or_selfies_refset)
+                self._mol_metric.preprocess(smiles_refset=smiles_refset)
+            
+            self._print_train_info()
+        except KeyboardInterrupt:
+            logger.print(f"Training is interrupted.")
+            return self
         
         try:
             obs = self._env.reset()
@@ -117,7 +141,8 @@ class Train:
                     
                 # save the agent
                 if self._time_steps % self._agent_save_freq == 0:
-                    self._save_train()
+                    score = self._inference(self._n_inference_episodes)
+                    self._save_train(score)
                     last_agent_save_t = self._time_steps
             logger.print(f"Training is finished.")
             if self._time_steps > last_agent_save_t:
@@ -132,6 +157,10 @@ class Train:
     def close(self):
         self._enabled = False
         self._env.close()
+        
+        if self._inference_env is not None:
+            self._inference_env.close()
+        
         if logger.enabled():
             logger.disable()
             
@@ -153,11 +182,13 @@ class Train:
             values=metric_info_dict["values"],
         )
         
-    def _write_metric_dicts(self, metric_dicts):
+    def _write_metric_dicts(self, metric_dicts, include_time_step=False):
         for metric_dict in metric_dicts:
             if metric_dict is None:
                 continue
             for metric_name, metric_info in metric_dict.items():
+                if include_time_step:
+                    metric_info["values"]["time_step"] = self._time_steps
                 if metric_name not in self._metric_csv_sync_writer_dict:
                     self._metric_csv_sync_writer_dict[metric_name] = self._make_csv_sync_writer(metric_name, metric_info)
                 if not any(value_field in set(self._metric_csv_sync_writer_dict[metric_name].value_fields) for value_field in metric_info["values"].keys()):
@@ -169,7 +200,7 @@ class Train:
             
     def _process_info_dict(self, env_info: dict, agent_info: Optional[dict]):        
         if "metric" in env_info: 
-            self._write_metric_dicts(env_info["metric"])
+            self._write_metric_dicts(env_info["metric"], True)
                 
         if agent_info is not None and "metric" in agent_info:
             self._write_metric_dicts(agent_info["metric"])
@@ -225,21 +256,36 @@ class Train:
         logger.print("", prefix="")
         
     def _summary_train(self):
-        if self._cumulative_reward_mean.count == 0:
-            reward_info = "episode has not terminated yet"
+        metric_df = pd.read_csv(f"{logger.dir()}/episode_metric.csv")
+        current_metric_df = metric_df[(metric_df["time_step"] < self._time_steps) & (metric_df["time_step"] >= self._time_steps - self._summary_freq)]
+        current_metric_df = current_metric_df.dropna(subset=["score", "smiles"])
+        if len(current_metric_df) == 0:
+            info = "episode has not terminated yet"
         else:
-            reward_info = f"cumulative reward: {self._cumulative_reward_mean.mean:.2f}"
-            logger.log_data("Environment/Cumulative Reward", self._cumulative_reward_mean.mean, self._time_steps)
-            logger.log_data("Environment/Cumulative Reward per Episode", self._cumulative_reward_mean.mean, self._episodes)
-            logger.log_data("Environment/Episode Length", self._episode_len_mean.mean, self._time_steps)
-            self._cumulative_reward_mean.reset()
-            self._episode_len_mean.reset()
-        logger.print(f"training time: {self._real_time:.2f}, time steps: {self._time_steps}/{self._total_time_steps}, {reward_info}")
+            score = current_metric_df["score"].mean()
+            self._mol_metric.preprocess(smiles_generated=current_metric_df["smiles"].tolist())
+            diversity = self._mol_metric.calc_diversity()
+            uniqueness = self._mol_metric.calc_uniqueness()
+            info = f"score: {score:.3f}, diversity: {diversity:.3f}, uniqueness: {uniqueness:.3f}"
+            logger.log_data("Environment/Score", score, self._time_steps)
+            logger.log_data(f"Environment/Diversity", diversity, self._time_steps)
+            logger.log_data(f"Environment/Uniqueness", uniqueness, self._time_steps)
+            
+            try:
+                novelty = self._mol_metric.calc_novelty()
+                info += f", novelty: {novelty:.3f}"
+                logger.log_data(f"Environment/Novelty", novelty, self._time_steps)
+            except ValueError:
+                pass
+            
+        logger.print(f"training time: {self._real_time:.2f}, time steps: {self._time_steps}/{self._total_time_steps}, {info}")
         
         for key, (value, t) in self._agent.log_data.items():
             logger.log_data(key, value, t)
+            
+        logger.plot_logs()
                     
-    def _save_train(self):
+    def _save_train(self, score=None):
         train_dict = dict(
             time_steps=self._time_steps,
             episodes=self._episodes,
@@ -257,10 +303,108 @@ class Train:
         try_create_dir(agent_ckpt_dir)
         torch.save(state_dict, f"{agent_ckpt_dir}/agent_{self._time_steps}.pt")
         
-        logger.print(f"Agent is successfully saved ({self._time_steps} steps): {agent_save_path}")
+        if score is not None and score > self._best_score:
+            self._best_score = score
+            best_agent_save_path = f"{logger.dir()}/best_agent.pt"
+            torch.save(state_dict, best_agent_save_path)
+            logger.print(f"Agent is successfully saved ({self._time_steps} steps): {agent_save_path} and {best_agent_save_path}")
+        else:
+            logger.print(f"Agent is successfully saved ({self._time_steps} steps): {agent_save_path}")
         
         # self._env.save_data(logger.dir())
         # self._save_molecules(logger.dir())
+        
+    def _inference(self, n_episodes: int):
+        if self._inference_env is None:
+            return None
+        
+        episodes = np.zeros((self._inference_env.num_envs,), dtype=int)
+        score_list = []
+        smiles_list = []
+        
+        inference_agent = self._agent.inference_agent(self._inference_env.num_envs)
+        inference_agent.model.eval()
+        
+        obs = self._inference_env.reset()
+        
+        while np.sum(episodes) < n_episodes:
+            obs = self._numpy_to_tensor(obs)
+            with torch.no_grad():
+                action = inference_agent.select_action(obs)
+            next_obs, reward, terminated, real_final_next_obs, env_info = self._inference_env.step(action.detach().cpu().numpy())
+            
+            # update the agent
+            real_next_obs = next_obs.copy()
+            real_next_obs[terminated] = real_final_next_obs
+            real_next_obs = self._numpy_to_tensor(real_next_obs)
+            
+            exp = drl.Experience(
+                obs,
+                action,
+                real_next_obs,
+                self._numpy_to_tensor(reward[..., np.newaxis]),
+                self._numpy_to_tensor(terminated[..., np.newaxis]),
+            )
+            with torch.no_grad():
+                _ = inference_agent.update(exp)
+                            
+            obs = next_obs
+            episodes += terminated.astype(int)
+            
+            scores, smiles = self._inference_metric(env_info)
+            score_list += scores
+            smiles_list += smiles
+            
+        if len(score_list) == 0:
+            logger.print(f"=== Inference ({self._time_steps} steps) -> # molecules: 0 ===")
+            return None
+            
+        avg_score = np.mean(score_list)
+        self._mol_metric.preprocess(smiles_generated=smiles_list)
+        diversity = self._mol_metric.calc_diversity()
+        uniqueness = self._mol_metric.calc_uniqueness()
+        info = f"Inference ({self._time_steps} steps) -> # molecules: {len(score_list)}, score: {avg_score:.3f}, diversity: {diversity:.3f}, uniqueness: {uniqueness:.3f}"
+        logger.log_data("Inference/Score", avg_score, self._time_steps)
+        logger.log_data("Inference/Diversity", diversity, self._time_steps)
+        logger.log_data("Inference/Uniqueness", uniqueness, self._time_steps)
+        try:
+            novelty = self._mol_metric.calc_novelty()
+            info += f", novelty: {novelty:.3f}"
+            logger.log_data("Inference/Novelty", novelty, self._time_steps)
+        except ValueError:
+            pass
+        
+        logger.print(f"=== {info} ===")
+        logger.plot_logs()
+            
+        self._agent.model.train()
+        
+        return avg_score
+        
+    def _inference_metric(self, env_info: dict):
+        scores = []
+        smiles = []
+        
+        if "metric" not in env_info:
+            return scores, smiles
+        
+        metric_dicts = env_info["metric"]
+        
+        for metric_dict in metric_dicts:
+            if metric_dict is None:
+                continue
+        
+            if "episode_metric" not in metric_dict:
+                continue
+            
+            score = metric_dict["episode_metric"]["values"]["score"]
+            smile = metric_dict["episode_metric"]["values"]["smiles"]
+            if score is not None and smile is not None:
+                scores.append(score)
+                smiles.append(smile)
+            
+        return scores, smiles
+        
         
     def _load_train(self):
         try:

@@ -1,9 +1,10 @@
 import builtins
-import warnings
-from dataclasses import dataclass
-from typing import Generic, Iterable, Optional, Tuple, Type, TypeVar, List, Callable, Union
-from collections import defaultdict
 import csv
+import warnings
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import (Callable, Generic, Iterable, List, Optional, Tuple, Type,
+                    TypeVar, Union)
 
 import yaml
 
@@ -12,15 +13,22 @@ from torch.utils.tensorboard.writer import SummaryWriter
 
 warnings.filterwarnings(action="default")
 import inspect
+import json
 import os
 import random
 import sys
 from contextlib import contextmanager
 from io import TextIOWrapper
 
+import matplotlib.pyplot as plt
 import numpy as np
+import selfies as sf
 import torch
 import torch.backends.cudnn as cudnn
+from rdkit import Chem
+from rdkit.Chem import Draw
+from tbparse import SummaryReader
+from tqdm import tqdm
 
 T = TypeVar("T")
 
@@ -86,7 +94,7 @@ class logger:
             raise LoggerException("logger is already disabled")
         
     @classmethod
-    def print(cls, message: str, prefix: str = "[SELFIES-RND] "):
+    def print(cls, message: str, prefix: str = "[Mol-AIR] "):
         builtins.print(f"{prefix}{message}")
         if cls._log_file is not None:
             cls._log_file.log_msg_file.write(f"{prefix}{message}\n")
@@ -103,6 +111,37 @@ class logger:
         if cls._log_dir is None:
             raise LoggerException("logger is not enabled")
         return cls._log_dir
+    
+    @classmethod
+    def plot_logs(cls):
+        if cls._log_file is None:
+            raise LoggerException("you need to enable the logger with enable_log_file option")
+        cls._log_file.tb_logger.flush()
+        
+        # Read the logs
+        reader = SummaryReader(cls.dir())
+        
+        # Get the DataFrame
+        df = reader.scalars
+        
+        unique_tags = df["tag"].unique()
+        
+        for tag in unique_tags:
+            elements = tag.split('/')
+            file_name = elements[-1]
+            dir_path = os.path.join(cls.dir(), "plots", *elements[:-1])
+            os.makedirs(dir_path, exist_ok=True)
+            file_path = os.path.join(dir_path, f"{file_name}.png")
+            
+            df_scalar = df[df["tag"] == tag]
+            plt.figure()
+            plt.plot(df_scalar["step"], df_scalar["value"])
+            plt.title(tag)
+            plt.xlabel("Step")
+            plt.ylabel("Value")
+            plt.grid(True)
+            plt.savefig(file_path)
+            plt.close()
 
 class TextInfoBox:
     def __init__(self, right_margin: int = 10) -> None:
@@ -171,16 +210,6 @@ def try_create_dir(directory):
             os.makedirs(directory)
     except OSError:
         print("Error: Failed to create the directory.")
-
-@contextmanager
-def suppress_stdout():
-    with open(os.devnull, "w") as devnull:
-        old_stdout = sys.stdout
-        sys.stdout = devnull
-        try:  
-            yield
-        finally:
-            sys.stdout = old_stdout
 
 class ItemUpdateFollower(Generic[T]):
     def __init__(self, init_item: T, include_init: bool = True):
@@ -355,3 +384,63 @@ class CSVSyncWriter:
         with open(self._file_path, "w") as f:
             writer = csv.DictWriter(f, fieldnames=self.fields)
             writer.writeheader()
+            
+def draw_molecules(smiles_list: List[str], scores: Optional[List[float]] = None, mols_per_row: int = 5, title: str = ""):
+    molecules = [Chem.MolFromSmiles(smiles) for smiles in smiles_list]
+    labels = [f"SMILES: {smiles}" for smiles in smiles_list]
+    if scores is not None:
+        if len(molecules) != len(scores):
+            raise ValueError(f"The number of molecules and scores must be the same, but got {len(molecules)} and {len(scores)}")
+        labels = [f"{label}\nScore: {score}" for label, score in zip(labels, scores)]
+    try:
+        return Draw.MolsToGridImage(molecules, molsPerRow=mols_per_row, subImgSize=(500, 500), legends=labels)
+    except ImportError:
+        raise ImportError("You cannot draw molecules due to the lack of libXrender.so.1. Install it with `sudo apt-get install libxrender1` or `conda install -c conda-forge libxrender`.")
+    
+def save_vocab(vocab: List[str], max_str_len: int, file_path: str):
+    with open(file_path, "w") as f:
+        json.dump({"vocabulary": vocab, "max_str_len": max_str_len}, f, indent=4)
+        
+def load_vocab(file_path: str) -> Tuple[List[str], int]:
+    with open(file_path, "r") as f:
+        data = json.load(f)
+    return data["vocabulary"], data["max_str_len"]
+
+def save_smiles_or_selfies(smiles_or_selfies_list: List[str], file_path: str):
+    with open(file_path, "w") as f:
+        for smiles_or_selfies in smiles_or_selfies_list:
+            f.write(f"{smiles_or_selfies}\n")
+
+def load_smiles_or_selfies(file_path: str) -> List[str]:
+    with open(file_path, "r") as f:
+        return f.read().splitlines()
+    
+def to_selfies(smiles_or_selfies_list: List[str], verbose: bool = True) -> List[str]:
+    if smiles_or_selfies_list[0].count("[") > 0:
+        return smiles_or_selfies_list
+    
+    smiles_or_selfies_iter = tqdm(smiles_or_selfies_list, desc="Converting SMILES to SELFIES") if verbose else smiles_or_selfies_list
+    selfies_list = [sf.encoder(s) for s in smiles_or_selfies_iter]
+    return selfies_list
+
+def to_smiles(smiles_or_selfies_list: List[str], verbose: bool = True) -> List[str]:
+    if smiles_or_selfies_list[0].count("[") == 0:
+        return smiles_or_selfies_list
+    
+    smiles_or_selfies_iter = tqdm(smiles_or_selfies_list, desc="Converting SELFIES to SMILES") if verbose else smiles_or_selfies_list
+    smiles_list = [sf.decoder(s) for s in smiles_or_selfies_iter]
+    return smiles_list # type: ignore
+
+@contextmanager
+def suppress_print():
+    original_stdout = sys.stdout  # Save original stdout
+    original_stderr = sys.stderr  # Save original stderr
+    sys.stdout = open(os.devnull, 'w')  # Redirect stdout to /dev/null
+    sys.stderr = open(os.devnull, 'w')  # Redirect stderr to /dev/null
+    try:
+        yield
+    finally:
+        sys.stdout.close()  # Close redirected stdout
+        sys.stderr.close()  # Close redirected stderr
+        sys.stdout = original_stdout  # Restore original stdout
+        sys.stderr = original_stderr  # Restore original stderr

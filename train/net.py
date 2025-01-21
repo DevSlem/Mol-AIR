@@ -3,10 +3,12 @@ from typing import Tuple
 import torch
 import torch.nn as nn
 import torch.nn.init as init
+
 import drl.agent as agent
 import drl.net as net
 from drl.policy import CategoricalPolicy
 from drl.policy_dist import CategoricalDist
+
 
 def init_linear_weights(model: nn.Module) -> None:
     for layer in model.modules():
@@ -101,6 +103,34 @@ class SelfiesEmbeddedConcatRND(nn.Module):
         return predicted_features, target_features
     
 # ==================================================================================================== #
+
+class SelfiesPretrainedNet(nn.Module, agent.PretrainedRecurrentNetwork):
+    def __init__(self, vocab_size: int) -> None:
+        super().__init__()
+        
+        # Actor only
+        self._actor_critic_shared_net = SelfiesRecurrentPPOSharedNet(vocab_size)
+        self._actor = CategoricalPolicy(self._actor_critic_shared_net.out_features, vocab_size)
+        
+        init_linear_weights(self)
+        
+    def forward(self, x: torch.Tensor, hidden_state: torch.Tensor) -> Tuple[CategoricalDist, torch.Tensor]:
+        # feed forward to the shared network
+        embedding_seq, next_seq_hidden_state = self._actor_critic_shared_net(x, hidden_state)
+        
+        # feed forward to the actor layer
+        policy_dist_seq = self._actor(embedding_seq)
+        
+        return policy_dist_seq, next_seq_hidden_state
+    
+    def hidden_state_shape(self) -> Tuple[int, int]:
+        return (
+            self._actor_critic_shared_net.n_recurrent_layers,
+            self._actor_critic_shared_net.hidden_state_dim
+        )
+        
+    def model(self) -> nn.Module:
+        return self
     
 class SelfiesRecurrentPPONet(nn.Module, agent.RecurrentPPONetwork):
     def __init__(self, in_features: int, num_actions: int) -> None:
@@ -137,12 +167,12 @@ class SelfiesRecurrentPPONet(nn.Module, agent.RecurrentPPONetwork):
         return policy_dist_seq, state_value_seq, next_seq_hidden_state
     
 class SelfiesRecurrentPPORNDNet(nn.Module, agent.RecurrentPPORNDNetwork):
-    def __init__(self, in_features: int, num_actions: int) -> None:
+    def __init__(self, in_features: int, num_actions: int, temperature: float = 1.0) -> None:
         super().__init__()
         
         # Actor-Critic
         self._actor_critic_shared_net = SelfiesRecurrentPPOSharedNet(in_features)
-        self._actor = CategoricalPolicy(self._actor_critic_shared_net.out_features, num_actions)
+        self._actor = CategoricalPolicy(self._actor_critic_shared_net.out_features, num_actions, temperature=temperature)
         self._ext_critic = nn.Linear(self._actor_critic_shared_net.out_features, 1)
         self._int_critic = nn.Linear(self._actor_critic_shared_net.out_features, 1)
         

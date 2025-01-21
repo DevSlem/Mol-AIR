@@ -8,6 +8,7 @@ Similarity-PPO:
     gamma: 1.0
   Env:
     similarity_coef: 1.0
+    init_selfies: '[C]'
   Train:
     num_envs: 64
     seed: 0

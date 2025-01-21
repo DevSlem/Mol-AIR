@@ -13,7 +13,8 @@ class CategoricalPolicy(nn.Module):
         num_discrete_actions: int,
         bias: bool = True,
         device: Optional[torch.device] = None,
-        dtype = None
+        dtype = None,
+        temperature: float = 1.0
     ) -> None:
         super().__init__()
         
@@ -25,6 +26,8 @@ class CategoricalPolicy(nn.Module):
             dtype
         )
         
+        self._temperature = temperature
+        
     def forward(self, x: torch.Tensor) -> CategoricalDist:
-        logits = self._layer(x)
+        logits = self._layer(x) / self._temperature
         return CategoricalDist(logits=logits)
