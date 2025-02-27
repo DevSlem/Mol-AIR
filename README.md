@@ -1,9 +1,10 @@
 # Mol-AIR
 
-**Mol-AIR** is a reinforcement learning-based
-framework using adaptive intrinsic rewards for effective goal-directed molecular generation. Mol-AIR leverages the strengths of **both history-based and learning-based intrinsic rewards** by exploiting random distillation network and counting-based strategies. You can find the details of Mol-AIR in the paper: 
+**Mol-AIR** is a reinforcement learning-based framework using adaptive intrinsic rewards for effective goal-directed molecular generation. Mol-AIR leverages the strengths of **both history-based and learning-based intrinsic rewards** by exploiting random distillation network and counting-based strategies. You can find the details of Mol-AIR in the paper: ["Mol-AIR: Molecular Reinforcement Learning with Adaptive Intrinsic Rewards for Goal-Directed Molecular Generation"](https://pubs.acs.org/doi/10.1021/acs.jcim.4c01669).
 
-[Mol-AIR: Molecular Reinforcement Learning with Adaptive Intrinsic Reward for Goal-directed Molecular Generation](https://arxiv.org/abs/2403.20109)
+<p align="center">
+  <img src="img/toc.png" width="70%">
+</p>
 
 This repository provides the implementation of Mol-AIR and the experiments on the molecular generation tasks.
 
@@ -28,7 +29,7 @@ generated compounds structurally similar to risperidone, a well-known DRD2 inhib
 
 ## Setup & Run Experiments
 
-The pure RL experiments were conducted with SELFIES 0.2.4 for comparison with the previous methods. While the pre-training + RL experiments were conducted with SELFIES 2.1.2 since SELFIES 0.2.4 is too old to construct the vocabulary for training. Therefore, we highly recommend to install the desired version of SELFIES to reproduce our experiments, even if it is compatible with any version and customizable. Also, we recommend to use conda to create a new environment for each experiment type.
+The pure RL experiments were conducted with 'SELFIES 0.2.4' for comparison with the previous methods. While the pre-training + RL experiments were conducted with 'SELFIES 2.1.2' since 'SELFIES 0.2.4' is too old to construct the vocabulary for training. Therefore, we highly recommend to install the desired version of SELFIES to reproduce our experiments, even if it is compatible with any version and customizable. Also, we recommend to use conda to create a new environment for each experiment type.
 
 ### Pure RL Experiments
 
@@ -55,7 +56,16 @@ All experiment configurations are in the [config/](config/) directory. `ppo.yaml
 python run.py [CONFIG_PATH]
 ```
 
-For example, pLogP with PPO is `$ python run.py config/plogp/ppo.yaml` and pLogP with Mol-AIR is `$ python run.py config/plogp/molair.yaml`.
+For example, pLogP with PPO is `$ python run.py config/plogp/ppo.yaml` and pLogP with Mol-AIR is `$ python run.py config/plogp/molair.yaml`:
+
+```bash
+python run.py config/plogp/molair.yaml # pLogP
+python run.py config/qed/molair.yaml # QED
+python run.py config/similarity/molair.yaml # Similarity
+python run.py config/gsk3b/molair.yaml # GSK3B
+python run.py config/jnk3/molair.yaml # JNK3
+python run.py config/gsk3b+jnk3/molair.yaml # GSK3B+JNK3
+```
 
 ### Pre-training + RL Experiments (Generative Model)
 
@@ -158,13 +168,11 @@ Refer to the [Mol-AIR Experiment Configuration](config/README.md) document for t
 Please cite our work if you find it useful:
 
 ```
-@misc{park2024molairmolecularreinforcementlearning,
-      title={Mol-AIR: Molecular Reinforcement Learning with Adaptive Intrinsic Rewards for Goal-directed Molecular Generation}, 
-      author={Jinyeong Park and Jaegyoon Ahn and Jonghwan Choi and Jibum Kim},
-      year={2024},
-      eprint={2403.20109},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2403.20109}, 
+@article{park2025mol,
+  title={Mol-AIR: Molecular Reinforcement Learning with Adaptive Intrinsic Rewards for Goal-directed Molecular Generation},
+  author={Park, Jinyeong and Ahn, Jaegyoon and Choi, Jonghwan and Kim, Jibum},
+  journal={Journal of Chemical Information and Modeling},
+  year={2025},
+  publisher={ACS Publications}
 }
 ```
