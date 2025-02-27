@@ -18,14 +18,18 @@ We have two types of experiments: **pure RL** and **pre-training + RL**.
 
 The pure RL experiments show that our proposed intrinsic reward method, **Mol-AIR**, can help the agent to explore the chemical space effectively so that the agent can find better molecules. The experiments were conducted on the 6 target properties: **pLogP, QED, Similarity, GSK3B, JNK3, and GSK3B+JNK3 (two objectives)**. The below figure shows Mol-AIR adaptively balances between exploration and exploitation during training:
 
-![](img/fig4.png)
+<p align="center">
+  <img src="img/fig4.png" width="70%">
+</p>
 
 ### Pre-training + RL Experiments
 
 The pre-training + RL experiments show that Mol-AIR works well in optimizing the pre-trained model to generate the various molecules with the desired properties. The experiments were conducted on the **DRD2+QED+SA** property (three objectives). The primary objective of the experiments is to discover dopamine receptor D2 (DRD2) inhibitors with high quantitative estimate of drug-likeness (QED) and low synthetic accessibility (SA) score. The below figure shows that our method successfully
 generated compounds structurally similar to risperidone, a well-known DRD2 inhibitor:
 
-![](img/fig7.png)
+<p align="center">
+  <img src="img/fig7.png" width="70%">
+</p>
 
 ## Setup & Run Experiments
 
