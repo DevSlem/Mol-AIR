@@ -13,6 +13,7 @@ from rdkit.rdBase import DisableLog
 from tdc import Oracle
 
 import modules.mol_air.envs.score_func as score_f
+from modules.core.enums import MoleculeType
 from modules.generation.property_evaluator import PropertyEvaluator
 from modules.mol_air.drl.util import IncrementalMean
 from modules.mol_air.envs.count_int_reward import CountIntReward
@@ -146,7 +147,8 @@ class ChemEnv(Env):
         self._env_id = env_id
 
         self.evaluator = PropertyEvaluator(
-            known_smiles_path="data/raw/experts_merged.smi"
+            known_smiles_path="data/raw/experts_merged.smi",
+            molecule_type=MoleculeType.SUBSTRATE # Mol-AIR won't work with nodes
         )
 
         self._selfies_list = []
