@@ -396,14 +396,19 @@ class MolRLPretrainFactory:
     def create_pretrain(self) -> Pretrain:
         self._pretrain_setup()
 
-        dataset = SelfiesDataset.from_txt(self._pretrain_config["dataset_path"])
-        net = SelfiesPretrainedNet(vocab_size=dataset.tokenizer.vocab_size)
+        full_dataset = SelfiesDataset.from_txt(self._pretrain_config["dataset_path"])
+        print(f"Loaded full dataset with {len(full_dataset)} samples.")
+        train_dataset = SelfiesDataset.from_txt(self._pretrain_config["train_dataset_path"])
+        print(f"Loaded train dataset with {len(train_dataset)} samples.")
+        val_dataset = SelfiesDataset.from_txt(self._pretrain_config["val_dataset_path"])
+        print(f"Loaded validation dataset with {len(val_dataset)} samples.")
+        net = SelfiesPretrainedNet(vocab_size=full_dataset.tokenizer.vocab_size)
 
         try:
             pretrain = instance_from_dict(Pretrain, {
                 "id": self._id,
                 "net": net,
-                "dataset": dataset,
+                "dataset": [full_dataset, train_dataset, val_dataset],
                 **self._pretrain_config,
             })
         except TypeError:

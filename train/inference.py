@@ -36,7 +36,7 @@ class Inference:
         
         self._enabled = True
     
-    def inference(self) -> "Inference":
+    def inference(self, file_id: int = 0) -> "Inference":
         if not self._enabled:
             raise RuntimeError("Inference is already closed.")        
 
@@ -136,13 +136,13 @@ class Inference:
             pass
         
         try_create_dir(f"{logger.dir()}/inference")
-        original_metric_df.to_csv(f"{logger.dir()}/inference/molecules.csv", index=False)
+        original_metric_df.to_csv(f"{logger.dir()}/inference/molecules_{file_id}.csv", index=False)
         
         avg_scores = pd.concat([pd.Series([n_total, n_valid, elapsed_time], index=["n_total", "n_valid", "time"]), avg_scores])
         avg_scores.index.name = "Metric"
         avg_scores.name = "Score"
-        avg_scores.to_csv(f"{logger.dir()}/inference/metrics.csv", header=True)
-        
+        # avg_scores.to_csv(f"{logger.dir()}/inference/metrics.csv", header=True)
+
         logger.print("===== Inference Result =====")
         logger.print(avg_scores.to_frame().T.to_string(index=False), prefix="")
         
@@ -155,14 +155,14 @@ class Inference:
         best_row = best_row.iloc[0]
         best_row.index.name = "Metric"
         best_row.name = "Score"
-        best_row.to_csv(f"{logger.dir()}/inference/best_molecule.csv", header=True)
+        best_row.to_csv(f"{logger.dir()}/best_molecule.csv", header=True)
         
-        # draw top-50 molecules
-        top_50_df = metric_df.drop_duplicates("smiles").sort_values("score", ascending=False).head(50)
-        try:
-            draw_molecules(top_50_df["smiles"].tolist(), top_50_df["score"].tolist()).save(f"{logger.dir()}/inference/top_50_unique_molecules.png")
-        except ImportError as e:
-            logger.print(str(e))
+        # # draw top-50 molecules
+        # top_50_df = metric_df.drop_duplicates("smiles").sort_values("score", ascending=False).head(50)
+        # try:
+        #     draw_molecules(top_50_df["smiles"].tolist(), top_50_df["score"].tolist()).save(f"{logger.dir()}/inference/top_50_unique_molecules.png")
+        # except ImportError as e:
+        #     logger.print(str(e))
         
         return self
     

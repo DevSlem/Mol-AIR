@@ -1,3 +1,4 @@
+import logging
 import warnings
 from dataclasses import dataclass, fields
 from enum import Flag, auto
@@ -147,8 +148,8 @@ class ChemEnv(Env):
         self._env_id = env_id
 
         self.evaluator = PropertyEvaluator(
-            known_smiles_path="data/raw/experts_merged.smi",
-            molecule_type=MoleculeType.SUBSTRATE # Mol-AIR won't work with nodes
+            known_smiles_path="data/raw/substrate/train_substrate.smi",
+            molecule_type=MoleculeType.SUBSTRATE  # Mol-AIR won't work with nodes
         )
 
         self._selfies_list = []
@@ -179,10 +180,24 @@ class ChemEnv(Env):
         self.num_actions = self._tokenizer.vocab_size
 
     def _calc_custom_property(self, smiles: str) -> float:
-        """
-        Calculate a custom property of the molecule.
-        """
-        return self.evaluator.evaluate(smiles)
+        """Calculates the custom property score, now with error handling."""
+        try:
+            # This is the line that was crashing
+            score = self.evaluator.evaluate(smiles)
+            return score
+        except RuntimeError as e:
+            # Catch the specific RDKit error
+            if "Invariant Violation" in str(e):
+                # Log the problematic SMILES for debugging, without crashing
+                logging.warning(f"RDKit conformer generation failed for SMILES: {smiles}. Returning penalty score 0.0.")
+                return 0.0  # Return a penalty score
+            else:
+                # If it's a different RuntimeError, we might still want to crash
+                raise e
+        except Exception as e:
+            # Catch any other potential errors from your evaluator
+            logging.error(f"An unexpected error occurred during property evaluation for SMILES: {smiles}. Error: {e}. Returning penalty score 0.0.")
+            return 0.0  # Return a penalty score for any other failure
 
     def reset(self) -> np.ndarray:
         self._time_step = -1
