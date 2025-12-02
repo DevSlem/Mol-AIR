@@ -171,12 +171,18 @@ Refer to the [Mol-AIR Experiment Configuration](config/README.md) document for t
 
 Please cite our work if you find it useful:
 
-```
-@article{park2025mol,
-  title={Mol-AIR: Molecular Reinforcement Learning with Adaptive Intrinsic Rewards for Goal-directed Molecular Generation},
-  author={Park, Jinyeong and Ahn, Jaegyoon and Choi, Jonghwan and Kim, Jibum},
-  journal={Journal of Chemical Information and Modeling},
-  year={2025},
-  publisher={ACS Publications}
+```bibtex
+@article{doi:10.1021/acs.jcim.4c01669,
+  author = {Park, Jinyeong and Ahn, Jaegyoon and Choi, Jonghwan and Kim, Jibum},
+  title = {Mol-AIR: Molecular Reinforcement Learning with Adaptive Intrinsic Rewards for Goal-Directed Molecular Generation},
+  journal = {Journal of Chemical Information and Modeling},
+  volume = {65},
+  number = {5},
+  pages = {2283-2296},
+  year = {2025},
+  doi = {10.1021/acs.jcim.4c01669},
+  note ={PMID: 39988822},
+  URL = {https://doi.org/10.1021/acs.jcim.4c01669},
+  eprint = {https://doi.org/10.1021/acs.jcim.4c01669}
 }
 ```
