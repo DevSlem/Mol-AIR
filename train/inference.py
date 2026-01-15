@@ -6,11 +6,10 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-import modules.mol_air.drl as drl
 from modules.mol_air.drl.agent import Agent
 from modules.mol_air.envs import Env
 from modules.mol_air.metric import MolMetric, canonicalize
-from modules.mol_air.util import draw_molecules, logger, to_smiles, try_create_dir
+from modules.mol_air.util import logger, to_smiles, try_create_dir
 
 
 class Inference:
@@ -63,19 +62,19 @@ class Inference:
             next_obs, reward, terminated, real_final_next_obs, env_info = self._env.step(action.detach().cpu().numpy())
             
             # update the agent
-            real_next_obs = next_obs.copy()
-            real_next_obs[terminated] = real_final_next_obs
-            real_next_obs = self._numpy_to_tensor(real_next_obs)
-            
-            exp = drl.Experience(
-                obs,
-                action,
-                real_next_obs,
-                self._numpy_to_tensor(reward[..., np.newaxis]),
-                self._numpy_to_tensor(terminated[..., np.newaxis]),
-            )
-            with torch.no_grad():
-                _ = self._agent.update(exp)
+            # real_next_obs = next_obs.copy()
+            # real_next_obs[terminated] = real_final_next_obs
+            # real_next_obs = self._numpy_to_tensor(real_next_obs)
+            #
+            # exp = drl.Experience(
+            #     obs,
+            #     action,
+            #     real_next_obs,
+            #     self._numpy_to_tensor(reward[..., np.newaxis]),
+            #     self._numpy_to_tensor(terminated[..., np.newaxis]),
+            # )
+            # with torch.no_grad():
+            #     _ = self._agent.update(exp)
                             
             # update metrics
             for key, value in self._inference_metric(env_info).items():

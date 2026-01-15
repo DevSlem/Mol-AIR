@@ -5,7 +5,7 @@ import selfies as sf
 import torch
 from torch.nn.functional import cross_entropy
 from torch.utils.data import DataLoader, Dataset
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from tqdm import tqdm
 
 from modules.mol_air.drl.agent import PretrainedRecurrentAgent, PretrainedRecurrentNetwork
@@ -28,24 +28,11 @@ class OneHotCollator:
         self.tokenizer = tokenizer
 
     def __call__(self, batch: List[np.ndarray]) -> Tuple[torch.Tensor, torch.Tensor]:
-        # The 'batch' argument is a list of individual numpy arrays,
-        # e.g., [array([1, 5, 3]), array([4, 2, 8]), ...]
-
-        # =========================================================================
-        # === THE FIX: CONSOLIDATE THE LIST OF ARRAYS INTO A SINGLE BATCH ARRAY ===
-        # Purpose: To convert the list of samples from the DataLoader into the
-        # single, 2D NumPy array that the tokenizer's `to_one_hot` method expects.
-        # How it works: `np.asarray` takes the list of 1D arrays and stacks
-        # them into a single 2D array of shape (batch_size, sequence_length).
-        # =========================================================================
         integer_sequence_batch = np.asarray(batch, dtype=np.int64)
 
-        # Now, `integer_sequence_batch` is a single NumPy array, which is the
-        # correct input format for the tokenizer.
         one_hot_batch = self.tokenizer.to_one_hot(integer_sequence_batch)
         one_hot_tensor = torch.from_numpy(one_hot_batch).float()
 
-        # Split into input (X) and target (Y)
         X = one_hot_tensor[:, :-1]
         Y = one_hot_tensor[:, 1:]
 
