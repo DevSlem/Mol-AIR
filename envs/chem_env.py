@@ -11,7 +11,6 @@ from rdkit import Chem
 from rdkit.Chem.rdMolDescriptors import GetMorganFingerprint
 from rdkit.DataStructs.cDataStructs import TanimotoSimilarity
 from rdkit.rdBase import DisableLog
-from tdc import Oracle
 
 import modules.mol_air.envs.score_func as score_f
 from modules.core.enums import MoleculeType
@@ -30,7 +29,6 @@ T = TypeVar("T")
 
 @env_config(name="ChemEnv")
 class ChemEnv(Env):
-    # TODO: add more properties
 
     @dataclass(frozen=True)
     class __Config:
@@ -148,7 +146,6 @@ class ChemEnv(Env):
         self._env_id = env_id
 
         self.evaluator = PropertyEvaluator(
-            known_smiles_path="data/raw/substrate/train_substrate.smi",
             molecule_type=MoleculeType.SUBSTRATE  # Mol-AIR won't work with nodes
         )
 
@@ -163,13 +160,17 @@ class ChemEnv(Env):
                                          2)
         with suppress_print():
             if self._config.gsk3b_coef > 0.0:
-                self._calc_gsk3b = Oracle(name='GSK3B')
+                # self._calc_gsk3b = Oracle(name='GSK3B')
+                self._calc_gsk3b = ...
             if self._config.jnk3_coef > 0.0:
-                self._calc_jnk3 = Oracle(name='JNK3')
+                # self._calc_jnk3 = Oracle(name='JNK3')
+                self._calc_jnk3 = ...
             if self._config.drd2_coef > 0.0:
-                self._calc_drd2 = Oracle(name='DRD2')
+                # self._calc_drd2 = Oracle(name='DRD2')
+                self._calc_drd2 = ...
             if self._config.sa_coef > 0.0:
-                self._calc_sa = Oracle(name='SA')
+                # self._calc_sa = Oracle(name='SA')
+                self._calc_sa = ...
             if self._config.custom_property_coef > 0.0:
                 self._calc_custom_property = self._calc_custom_property
             # TODO: add more properties
